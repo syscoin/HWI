@@ -7,8 +7,8 @@ from typing import List, Tuple
 import unittest
 import hwilib.base58 as base58
 
-# Taken from Bitcoin Core
-# https://github.com/bitcoin/bitcoin/blob/master/src/test/data/base58_encode_decode.json
+# Taken from Syscoin Core
+# https://github.com/syscoin/syscoin/blob/master/src/test/data/base58_encode_decode.json
 TEST_VECTORS: List[Tuple[str, str]] = [
     ("", ""),
     ("61", "2g"),

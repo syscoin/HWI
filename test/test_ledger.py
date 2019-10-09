@@ -3,7 +3,7 @@
 import argparse
 import unittest
 
-from test_device import DeviceTestCase, start_bitcoind, TestDeviceConnect, TestDisplayAddress, TestGetKeypool, TestGetDescriptors, TestSignMessage, TestSignTx
+from test_device import DeviceTestCase, start_syscoind, TestDeviceConnect, TestDisplayAddress, TestGetKeypool, TestGetDescriptors, TestSignMessage, TestSignTx
 
 from hwilib.cli import process_commands
 
@@ -78,14 +78,14 @@ def ledger_test_suite(device_model, rpc, userpass, interface):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Test Ledger implementation on physical device')
-    parser.add_argument('bitcoind', help='Path to bitcoind binary')
+    parser.add_argument('syscoind', help='Path to syscoind binary')
     parser.add_argument('device_model', help='Device model', choices=['ledger_nano_s', 'ledger_nano_x'])
     parser.add_argument('--interface', help='Which interface to send commands over', choices=['library', 'cli', 'bindist'], default='library')
 
     args = parser.parse_args()
 
-    # Start bitcoind
-    rpc, userpass = start_bitcoind(args.bitcoind)
+    # Start syscoind
+    rpc, userpass = start_syscoind(args.syscoind)
 
     suite = ledger_test_suite(args.device_model, rpc, userpass, args.interface)
     unittest.TextTestRunner(verbosity=2).run(suite)

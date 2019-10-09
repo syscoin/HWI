@@ -1,6 +1,6 @@
 """
 *******************************************************************************
-*   BTChip Bitcoin Hardware Wallet Python API
+*   BTChip Syscoin Hardware Wallet Python API
 *   (c) 2014 BTChip - 1BTChip7VfTnrPra5jqci7ejnMguuHogTn
 *
 *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,8 +18,8 @@
 """
 
 from .btchipComm import *
-from .bitcoinTransaction import *
-from .bitcoinVarint import *
+from .syscoinTransaction import *
+from .syscoinVarint import *
 from .btchipException import *
 from .btchipHelpers import *
 from binascii import hexlify, unhexlify
@@ -245,7 +245,7 @@ class btchip:
 		outputs = None
 		if rawTx is not None:
 			try:
-				fullTx = bitcoinTransaction(bytearray(rawTx))
+				fullTx = syscoinTransaction(bytearray(rawTx))
 				outputs = fullTx.serializeOutputs()
 				if len(donglePath) != 0:
 					apdu = [ self.BTCHIP_CLA, self.BTCHIP_INS_HASH_INPUT_FINALIZE_FULL, 0xFF, 0x00 ]

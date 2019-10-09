@@ -1,8 +1,8 @@
-# Bitcoin Hardware Wallet Interface
+# Syscoin Hardware Wallet Interface
 
-[![Build Status](https://travis-ci.org/bitcoin-core/HWI.svg?branch=master)](https://travis-ci.org/bitcoin-core/HWI)
+[![Build Status](https://travis-ci.org/syscoin/HWI.svg?branch=master)](https://travis-ci.org/syscoin/HWI)
 
-The Bitcoin Hardware Wallet Interface is a Python library and command line tool for interacting with hardware wallets.
+The Syscoin Hardware Wallet Interface is a Python library and command line tool for interacting with hardware wallets.
 It provides a standard way for software to work with hardware wallets without needing to implement device specific drivers.
 Python software can use the provided library (`hwilib`). Software in other languages can execute the `hwi` tool.
 
@@ -32,7 +32,7 @@ Pip can also be used to install all of the dependencies (in virtualenv or system
 ## Install
 
 ```
-git clone https://github.com/bitcoin-core/HWI.git
+git clone https://github.com/syscoin/HWI.git
 cd HWI
 ```
 
@@ -84,9 +84,9 @@ Please also see [docs](docs/) for additional information about each device.
 | Mixed Segwit and Non-Segwit Inputs | N/A | N/A | Yes | N/A | Yes | Yes | Yes |
 | Display on device screen | Yes | Yes | Yes | Yes | N/A | Yes | Yes |
 
-## Using with Bitcoin Core
+## Using with Syscoin Core
 
-See [Using Bitcoin Core with Hardware Wallets](docs/bitcoin-core-usage.md).
+See [Using Syscoin Core with Hardware Wallets](docs/syscoin-core-usage.md).
 
 ## License
 

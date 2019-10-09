@@ -127,7 +127,7 @@ def getdescriptor(client, master_xpub, testnet=False, path=None, internal=False,
         if testnet:
             path += "1'/"
         else:
-            path += "0'/"
+            path += "57'/" # Syscoin SLIP-0044
 
         # Account
         path += str(account) + '\'/'

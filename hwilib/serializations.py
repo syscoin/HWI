@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 # Copyright (c) 2010 ArtForz -- public domain half-a-node
 # Copyright (c) 2012 Jeff Garzik
-# Copyright (c) 2010-2016 The Bitcoin Core developers
+# Copyright (c) 2010-2016 The Syscoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
-"""Bitcoin Object Python Serializations
+"""Syscoin Object Python Serializations
 
 Modified from the test/test_framework/mininode.py file from the
-Bitcoin repository
+Syscoin repository
 
 CTransaction,CTxIn, CTxOut, etc....:
     data structures that should map to corresponding structures in
-    bitcoin/primitives for transactions only
+    syscoin/primitives for transactions only
 ser_*, deser_*: functions that handle serialization/deserialization
 """
 
@@ -189,7 +189,7 @@ def ser_sig_compact(r, s, recid):
 
     return sig
 
-# Objects that map to bitcoind objects, which can be serialized/deserialized
+# Objects that map to syscoind objects, which can be serialized/deserialized
 
 MSG_WITNESS_FLAG = 1 << 30
 
@@ -367,7 +367,7 @@ class CTransaction(object):
         if len(self.vin) == 0:
             flags = struct.unpack("<B", f.read(1))[0]
             # Not sure why flags can't be zero, but this
-            # matches the implementation in bitcoind
+            # matches the implementation in syscoind
             if (flags != 0):
                 self.vin = deser_vector(f, CTxIn)
                 self.vout = deser_vector(f, CTxOut)

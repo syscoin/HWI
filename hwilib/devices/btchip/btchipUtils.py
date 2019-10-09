@@ -1,6 +1,6 @@
 """
 *******************************************************************************
-*   BTChip Bitcoin Hardware Wallet Python API
+*   BTChip Syscoin Hardware Wallet Python API
 *   (c) 2014 BTChip - 1BTChip7VfTnrPra5jqci7ejnMguuHogTn
 *
 *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +18,7 @@
 """
 
 from .btchipException import *
-from .bitcoinTransaction import *
+from .syscoinTransaction import *
 from .btchipHelpers import *
 
 def compress_public_key(publicKey):
@@ -36,11 +36,11 @@ def compress_public_key(publicKey):
 		raise BTChipException("Invalid public key format")
 
 def format_transaction(dongleOutputData, trustedInputsAndInputScripts, version=0x01, lockTime=0):
-	transaction = bitcoinTransaction()
+	transaction = syscoinTransaction()
 	transaction.version = []
 	writeUint32LE(version, transaction.version)
 	for item in trustedInputsAndInputScripts:
-		newInput = bitcoinInput()
+		newInput = syscoinInput()
 		newInput.prevOut = item[0][4:4+36]
 		newInput.script = item[1]
 		if len(item) > 2:

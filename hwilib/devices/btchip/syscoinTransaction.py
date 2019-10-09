@@ -1,6 +1,6 @@
 """
 *******************************************************************************
-*   BTChip Bitcoin Hardware Wallet Python API
+*   BTChip Syscoin Hardware Wallet Python API
 *   (c) 2014 BTChip - 1BTChip7VfTnrPra5jqci7ejnMguuHogTn
 *
 *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,10 +17,10 @@
 ********************************************************************************
 """
 
-from .bitcoinVarint import *
+from .syscoinVarint import *
 from binascii import hexlify
 
-class bitcoinInput:
+class syscoinInput:
 
 	def __init__(self, bufferOffset=None):
 		self.prevOut = ""
@@ -53,7 +53,7 @@ class bitcoinInput:
 		buf += "Sequence : " + hexlify(self.sequence) + "\r\n"
 		return buf
 
-class bitcoinOutput:
+class syscoinOutput:
 
 	def __init__(self, bufferOffset=None):
 		self.amount = ""
@@ -82,7 +82,7 @@ class bitcoinOutput:
 		return buf
 
 
-class bitcoinTransaction:
+class syscoinTransaction:
 
 	def __init__(self, data=None):
 		self.version = ""
@@ -103,14 +103,14 @@ class bitcoinTransaction:
 			numInputs = inputSize['value']
 			for i in range(numInputs):
 				tmp = { 'buffer': data, 'offset' : offset}
-				self.inputs.append(bitcoinInput(tmp))
+				self.inputs.append(syscoinInput(tmp))
 				offset = tmp['offset']
 			outputSize = readVarint(data, offset)
 			offset += outputSize['size']
 			numOutputs = outputSize['value']
 			for i in range(numOutputs):
 				tmp = { 'buffer': data, 'offset' : offset}
-				self.outputs.append(bitcoinOutput(tmp))
+				self.outputs.append(syscoinOutput(tmp))
 				offset = tmp['offset']
 			if self.witness:
 				self.witnessScript = data[offset : len(data) - 4]

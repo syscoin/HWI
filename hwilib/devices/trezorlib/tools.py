@@ -39,7 +39,7 @@ def H_(x: int) -> int:
 
 def btc_hash(data):
     """
-    Double-SHA256 hash as used in BTC
+    Double-SHA256 hash as used in SYS
     """
     return hashlib.sha256(hashlib.sha256(data).digest()).digest()
 
@@ -89,7 +89,7 @@ def b58encode(v):
         long_value = div
     result = __b58chars[long_value] + result
 
-    # Bitcoin does a little leading-zero-compression:
+    # Syscoin does a little leading-zero-compression:
     # leading 0-bytes in the input become leading-1s
     nPad = 0
     for c in v:
@@ -184,7 +184,7 @@ def parse_path(nstr: str) -> Address:
 def normalize_nfc(txt):
     """
     Normalize message to NFC and return bytes suitable for protobuf.
-    This seems to be bitcoin-qt standard of doing things.
+    This seems to be syscoin-qt standard of doing things.
     """
     if isinstance(txt, bytes):
         txt = txt.decode()

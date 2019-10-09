@@ -2,7 +2,7 @@
 
 from ..hwwclient import HardwareWalletClient
 from ..errors import ActionCanceledError, BadArgumentError, DeviceConnectionError, DeviceFailureError, UnavailableActionError, common_err_msgs, handle_errors
-from .btchip.bitcoinTransaction import bitcoinTransaction
+from .btchip.syscoinTransaction import syscoinTransaction
 from .btchip.btchip import btchip
 from .btchip.btchipComm import HIDDongleHIDAPI
 from .btchip.btchipException import BTChipException
@@ -179,7 +179,7 @@ class LedgerClient(HardwareWalletClient):
                 segwit_inputs.append({"value": txin.prevout.serialize() + struct.pack("<Q", psbt_in.non_witness_utxo.vout[txin.prevout.n].nValue), "witness": True, "sequence": seq_hex})
                 # We only need legacy inputs in the case where all inputs are legacy, we check
                 # later
-                ledger_prevtx = bitcoinTransaction(psbt_in.non_witness_utxo.serialize())
+                ledger_prevtx = syscoinTransaction(psbt_in.non_witness_utxo.serialize())
                 legacy_inputs.append(self.app.getTrustedInput(ledger_prevtx, txin.prevout.n))
                 legacy_inputs[-1]["sequence"] = seq_hex
                 has_legacy = True
@@ -288,7 +288,7 @@ class LedgerClient(HardwareWalletClient):
         self.app.signMessagePrepare(keypath, message)
         signature = self.app.signMessageSign()
 
-        # Make signature into standard bitcoin format
+        # Make signature into standard syscoin format
         rLength = signature[3]
         r = signature[4: 4 + rLength]
         sLength = signature[4 + rLength + 1]

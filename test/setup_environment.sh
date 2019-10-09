@@ -162,14 +162,14 @@ pipenv run make -j$(nproc) kkemu
 find . -name "emulator.img" -exec rm {} \;
 cd ..
 
-# Clone bitcoind if it doesn't exist, or update it if it does
-bitcoind_setup_needed=false
-if [ ! -d "bitcoin" ]; then
-    git clone https://github.com/bitcoin/bitcoin.git
-    cd bitcoin
-    bitcoind_setup_needed=true
+# Clone syscoind if it doesn't exist, or update it if it does
+syscoind_setup_needed=false
+if [ ! -d "syscoin" ]; then
+    git clone https://github.com/syscoin/syscoin.git
+    cd syscoin
+    syscoind_setup_needed=true
 else
-    cd bitcoin
+    cd syscoin
     git fetch
 
     # Determine if we need to pull. From https://stackoverflow.com/a/3278427
@@ -182,13 +182,13 @@ else
         echo "Up-to-date"
     elif [ $LOCAL = $BASE ]; then
         git pull
-        bitcoind_setup_needed=true
+        syscoind_setup_needed=true
     fi
 fi
 
-# Build bitcoind. This is super slow, but it is cached so it runs fairly quickly.
-if [ "$bitcoind_setup_needed" == true ] ; then
+# Build syscoind. This is super slow, but it is cached so it runs fairly quickly.
+if [ "$syscoind_setup_needed" == true ] ; then
     ./autogen.sh
     ./configure --with-incompatible-bdb --with-miniupnpc=no --without-gui --disable-zmq --disable-tests --disable-bench --with-libs=no --with-utils=no
 fi
-make -j$(nproc) src/bitcoind
+make -j$(nproc) src/syscoind

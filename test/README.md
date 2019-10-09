@@ -7,25 +7,25 @@ This folder contains test cases for HWI. To run these tests, `hwilib` will need 
 - `test_bech32.py` tests the bech32 serialization.
 This is taken directly from the [python reference implementation](https://github.com/sipa/bech32/blob/master/ref/python/tests.py).
 - `test_psbt.py` tests the psbt serialization.
-It implements all of the [BIP 174 serialization test vectors](https://github.com/bitcoin/bips/blob/master/bip-0174.mediawiki#Test_Vectors).
+It implements all of the [BIP 174 serialization test vectors](https://github.com/syscoin/bips/blob/master/bip-0174.mediawiki#Test_Vectors).
 - `test_trezor.py` tests the command line interface and the Trezor implementation.
 It uses the [Trezor One firmware emulator](https://github.com/trezor/trezor-mcu/#building-for-development).
-It also tests usage with `bitcoind`.
+It also tests usage with `syscoind`.
 - `test_keepkey.py` tests the command line interface and the Keepkey implementation.
 It uses the [Keepkey firmware emulator](https://github.com/keepkey/keepkey-firmware/blob/master/docs/Build.md).
-It also tests usage with `bitcoind`.
+It also tests usage with `syscoind`.
 - `test_coldcard.py` tests the command line interface and Coldcard implementation.
 It uses the [Coldcard simulator](https://github.com/Coldcard/firmware/tree/master/unix#coldcard-desktop-simulator).
-It also tests usage with `bitcoind`.
+It also tests usage with `syscoind`.
 
-`setup_environment.sh` will build the Trezor emulator, the Coldcard simulator, the Keepkey emulator, the Digital Bitbox simulator, and `bitcoind`.
-if run in the `test/` directory, these will be built in `work/test/trezor-mcu`, `work/test/firmware`, `work/test/keepkey-firmware`, `work/test/mcu`, and `work/test/bitcoin` respectively.
+`setup_environment.sh` will build the Trezor emulator, the Coldcard simulator, the Keepkey emulator, the Digital Bitbox simulator, and `syscoind`.
+if run in the `test/` directory, these will be built in `work/test/trezor-mcu`, `work/test/firmware`, `work/test/keepkey-firmware`, `work/test/mcu`, and `work/test/syscoin` respectively.
 
-`run_tests.py` runs the tests. If run from the `test/` directory, it will be able to find the Trezor emulator, Coldcard simulator, Keepkey emulator, Digital Bitbox simulator, and bitcoind.
+`run_tests.py` runs the tests. If run from the `test/` directory, it will be able to find the Trezor emulator, Coldcard simulator, Keepkey emulator, Digital Bitbox simulator, and syscoind.
 Otherwise the paths to those will need to be specified on the command line.
 test_trezor.py`, `test_coldcard.py`, `test_keepkey.py`, and `test/test_digitalbitbox.py` can be disabled.
 
-If you are building the Trezor emulator, the Coldcard simulator, the Keepkey emulator, the Digital Bitbox simulator, and `bitcoind` without `setup_environment.sh`, then you will need to make `work/` inside of `test/`.
+If you are building the Trezor emulator, the Coldcard simulator, the Keepkey emulator, the Digital Bitbox simulator, and `syscoind` without `setup_environment.sh`, then you will need to make `work/` inside of `test/`.
 
 ```
 $ cd test
@@ -161,6 +161,6 @@ $ cmake -C cmake/caches/emulator.cmake . -DNANOPB_DIR=nanopb/ -DKK_HAVE_STRLCAT=
 $ make kkemu
 ```
 
-## Bitcoin Core
+## Syscoin Core
 
-In order to build `bitcoind`, see [Bitcoin Core's build documentation](https://github.com/bitcoin/bitcoin/blob/master/doc/build-unix.md#linux-distribution-specific-instructions) to get all of the dependencies installed and for instructions on how to build.
+In order to build `syscoind`, see [Syscoin Core's build documentation](https://github.com/syscoin/syscoin/blob/master/doc/build-unix.md#linux-distribution-specific-instructions) to get all of the dependencies installed and for instructions on how to build.

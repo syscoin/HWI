@@ -6,14 +6,14 @@ class HardwareWalletClient(object):
     def __init__(self, path, password):
         self.path = path
         self.password = password
-        self.message_magic = b"\x18Bitcoin Signed Message:\n"
+        self.message_magic = b"\x18Syscoin Signed Message:\n"
         self.is_testnet = False
         self.fingerprint = None
         self.xpub_cache = {}
 
-    # Get the master BIP 44 pubkey
+    # Get the master BIP 84 pubkey
     def get_master_xpub(self):
-        return self.get_pubkey_at_path('m/44\'/0\'/0\'')
+        return self.get_pubkey_at_path('m/84\'/57\'/0\'')
 
     # Must return a dict with the xpub
     # Retrieves the public key at the specified BIP 32 derivation path

@@ -8,7 +8,7 @@ from test_base58 import TestBase58
 from test_bech32 import TestSegwitAddress
 from test_coldcard import coldcard_test_suite
 from test_descriptor import TestDescriptor
-from test_device import start_bitcoind
+from test_device import start_syscoind
 from test_psbt import TestPSBT
 from test_trezor import trezor_test_suite
 from test_ledger import ledger_test_suite
@@ -50,7 +50,7 @@ parser.add_argument('--keepkey-path', dest='keepkey_path', help='Path to Keepkey
 parser.add_argument('--bitbox-path', dest='bitbox_path', help='Path to Digital Bitbox simulator', default='work/mcu/build/bin/simulator')
 
 parser.add_argument('--all', help='Run tests on all existing simulators', default=False, action='store_true')
-parser.add_argument('--bitcoind', help='Path to bitcoind', default='work/bitcoin/src/bitcoind')
+parser.add_argument('--syscoind', help='Path to syscoind', default='work/syscoin/src/syscoind')
 parser.add_argument('--interface', help='Which interface to send commands over', choices=['library', 'cli', 'bindist', 'stdin'], default='library')
 
 parser.set_defaults(trezor=False, trezor_t=False, coldcard=False, keepkey=False, bitbox=False)
@@ -73,8 +73,8 @@ if args.all:
     args.bitbox = True
 
 if args.trezor or args.trezor_t or args.coldcard or args.ledger_s or args.ledger_x or args.keepkey or args.bitbox:
-    # Start bitcoind
-    rpc, userpass = start_bitcoind(args.bitcoind)
+    # Start syscoind
+    rpc, userpass = start_syscoind(args.syscoind)
 
     if args.bitbox:
         suite.addTest(digitalbitbox_test_suite(args.bitbox_path, rpc, userpass, args.interface))

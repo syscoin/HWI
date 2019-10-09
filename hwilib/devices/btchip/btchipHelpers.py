@@ -1,6 +1,6 @@
 """
 *******************************************************************************
-*   BTChip Bitcoin Hardware Wallet Python API
+*   BTChip Syscoin Hardware Wallet Python API
 *   (c) 2014 BTChip - 1BTChip7VfTnrPra5jqci7ejnMguuHogTn
 *
 *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,8 +30,8 @@ def satoshi_to_btc(satoshi_count):
     r = satoshi_count * COIN_PER_SATOSHI
     return r.normalize()
 
-def btc_to_satoshi(btc):
-    return int(decimal.Decimal(btc) * SATOSHI_PER_COIN)
+def btc_to_satoshi(sys):
+    return int(decimal.Decimal(sys) * SATOSHI_PER_COIN)
 # /from pycoin
 
 def writeUint32BE(value, buffer):

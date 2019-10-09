@@ -34,7 +34,7 @@ AFC_WRAPPED     = const(0x10)       # for transition/compat types for segwit vs.
 # Numeric codes for specific address types
 AF_CLASSIC      = AFC_PUBKEY          # 1addr
 AF_P2SH         = AFC_SCRIPT          # classic multisig / simple P2SH / 3hash
-AF_P2WPKH       = AFC_PUBKEY  | AFC_SEGWIT | AFC_BECH32     # bc1qsdklfj
+AF_P2WPKH       = AFC_PUBKEY  | AFC_SEGWIT | AFC_BECH32     # sys1qsdklfj
 AF_P2WSH        = AFC_SCRIPT  | AFC_SEGWIT | AFC_BECH32     # segwit multisig
 AF_P2WPKH_P2SH  = AFC_WRAPPED | AFC_PUBKEY | AFC_SEGWIT     # looks classic P2SH, but p2wpkh inside
 AF_P2WSH_P2SH   = AFC_WRAPPED | AFC_SCRIPT | AFC_SEGWIT     # looks classic P2SH, segwit multisig

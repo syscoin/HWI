@@ -1,6 +1,6 @@
 import re
 
-# From: https://github.com/bitcoin/bitcoin/blob/master/src/script/descriptor.cpp
+# From: https://github.com/syscoin/syscoin/blob/master/src/script/descriptor.cpp
 
 def PolyMod(c, val):
     c0 = c >> 35
