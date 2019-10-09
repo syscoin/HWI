@@ -115,7 +115,7 @@ def process_commands(cli_args):
     enumerate_parser = subparsers.add_parser('enumerate', help='List all available devices')
     enumerate_parser.set_defaults(func=enumerate_handler)
 
-    getmasterxpub_parser = subparsers.add_parser('getmasterxpub', help='Get the extended public key at m/84\'/57\'/0\'')
+    getmasterxpub_parser = subparsers.add_parser('getmasterxpub', help='Get the extended public key at m/44\'/57\'/0\'')
     getmasterxpub_parser.set_defaults(func=getmasterxpub_handler)
 
     signtx_parser = subparsers.add_parser('signtx', help='Sign a PSBT')

@@ -11,9 +11,9 @@ class HardwareWalletClient(object):
         self.fingerprint = None
         self.xpub_cache = {}
 
-    # Get the master BIP 84 pubkey
+    # Get the master BIP 44 pubkey
     def get_master_xpub(self):
-        return self.get_pubkey_at_path('m/84\'/57\'/0\'')
+        return self.get_pubkey_at_path('m/44\'/57\'/0\'')
 
     # Must return a dict with the xpub
     # Retrieves the public key at the specified BIP 32 derivation path
