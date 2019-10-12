@@ -230,17 +230,17 @@ class TestGetKeypool(DeviceTestCase):
             addr_info = self.wrpc.getaddressinfo(self.wrpc.getrawchangeaddress())
             self.assertEqual(addr_info['hdkeypath'], "m/84'/1'/3'/1/{}".format(i))
 
-        keypool_desc = self.do_command(self.dev_args + ['getkeypool', '--path', 'm/0h/0h/4h/*', '0', '20'])
+        keypool_desc = self.do_command(self.dev_args + ['getkeypool', '--path', 'm/84h/57h/4h/*', '0', '20'])
         import_result = self.wrpc.importmulti(keypool_desc)
         self.assertTrue(import_result[0]['success'])
         for i in range(0, 21):
             addr_info = self.wrpc.getaddressinfo(self.wrpc.getnewaddress())
-            self.assertEqual(addr_info['hdkeypath'], "m/0'/0'/4'/{}".format(i))
+            self.assertEqual(addr_info['hdkeypath'], "m/84'/57'/4'/{}".format(i))
 
-        keypool_desc = self.do_command(self.dev_args + ['getkeypool', '--path', '/0h/0h/4h/*', '0', '20'])
+        keypool_desc = self.do_command(self.dev_args + ['getkeypool', '--path', '/84h/57h/4h/*', '0', '20'])
         self.assertEqual(keypool_desc['error'], 'Path must start with m/')
         self.assertEqual(keypool_desc['code'], -7)
-        keypool_desc = self.do_command(self.dev_args + ['getkeypool', '--path', 'm/0h/0h/4h/', '0', '20'])
+        keypool_desc = self.do_command(self.dev_args + ['getkeypool', '--path', 'm/84h/57h/4h/', '0', '20'])
         self.assertEqual(keypool_desc['error'], 'Path must end with /*')
         self.assertEqual(keypool_desc['code'], -7)
 
