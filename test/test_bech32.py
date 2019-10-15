@@ -106,10 +106,10 @@ class TestSegwitAddress(unittest.TestCase):
     def test_valid_address(self):
         """Test whether valid addresses decode to the correct output."""
         for (address, hexscript) in VALID_ADDRESS:
-            hrp = "sys"
+            hrp = "bc"
             witver, witprog = segwit_addr.decode(hrp, address)
             if witver is None:
-                hrp = "tsys"
+                hrp = "tb"
                 witver, witprog = segwit_addr.decode(hrp, address)
             self.assertIsNotNone(witver)
             scriptpubkey = segwit_scriptpubkey(witver, witprog)
