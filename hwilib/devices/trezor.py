@@ -333,7 +333,7 @@ class TrezorClient(HardwareWalletClient):
     def sign_message(self, message, keypath):
         self._check_unlocked()
         path = tools.parse_path(keypath)
-        result = syscoin.sign_message(self.client, 'Syscoin', path, message)
+        result = syscoin.sign_message(self.client, 'Bitcoin', path, message)
         return {'signature': base64.b64encode(result.signature).decode('utf-8')}
 
     # Display address of specified type on the device. Only supports single-key based addresses.
@@ -343,7 +343,7 @@ class TrezorClient(HardwareWalletClient):
         expanded_path = tools.parse_path(keypath)
         address = syscoin.get_address(
             self.client,
-            "Testnet" if self.is_testnet else "Syscoin",
+            "Testnet" if self.is_testnet else "Bitcoin",
             expanded_path,
             show_display=True,
             script_type=proto.InputScriptType.SPENDWITNESS if bech32 else (proto.InputScriptType.SPENDP2SHWITNESS if p2sh_p2wpkh else proto.InputScriptType.SPENDADDRESS)
