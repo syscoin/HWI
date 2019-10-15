@@ -90,4 +90,4 @@ See [Using Syscoin Core with Hardware Wallets](docs/syscoin-core-usage.md).
 
 ## License
 
-This project is available under the MIT License, Copyright Andrew Chow.
+This project is available under the MIT License, Copyright Jagdeep Sidhu && Andrew Chow
