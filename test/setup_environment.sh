@@ -165,7 +165,7 @@ cd ..
 # Clone syscoind if it doesn't exist, or update it if it does
 syscoind_setup_needed=false
 if [ ! -d "syscoin" ]; then
-    git clone https://github.com/syscoin/syscoin.git
+    git clone https://github.com/syscoin/syscoin.git -b dev-4.x
     cd syscoin
     syscoind_setup_needed=true
 else
