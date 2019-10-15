@@ -97,11 +97,11 @@ version = "0.6.1"
 
 [[package]]
 category = "main"
-description = "Implementation of Syscoin BIP-0039"
+description = "Implementation of Bitcoin BIP-0039"
 name = "mnemonic"
 optional = false
 python-versions = "*"
-version = "4.1"
+version = "0.18"
 
 [package.dependencies]
 pbkdf2 = "*"
