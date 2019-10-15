@@ -1,6 +1,6 @@
 [
     {
-        "master_xpub": "tpubDDpWvmUrPZrhSPmUzCMBHffvC3HyMAPnWDSAQNBTnj1iZeJa7BZQEttFiP4DS4GCcXQHezdXhn86Hj6LHX5EDstXPWrMaSneRWM8yUf6NFd",
+        "master_xpub": "tpubDCfbzJ1sL5mL2uPHLmVj3jAXbUTaCtDa6FyM2Xv6sPagGGYLNKHuaWNiMc21k8AR5eH8fyuUiYqy5vS6g8amygGnwh1Ku2vcEnWaDXUvotT",
         "vectors" : [
             {
                 "path" : "m/0h",

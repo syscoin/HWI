@@ -303,7 +303,7 @@ def trezor_test_suite(emulator, rpc, userpass, interface, model_t=False):
     type = 'trezor'
     path = 'udp:127.0.0.1:21324'
     fingerprint = '95d8f670'
-    master_xpub = 'xpub6D1weXBcFAo8CqBbpP4TbH5sxQH8ZkqC5pDEvJ95rNNBZC9zrKmZP2fXMuve7ZRBe18pWQQsGg68jkq24mZchHwYENd8cCiSb71u3KD4AFH'
+    master_xpub = 'xpub6CVjmiSVrLVxDL6kQR5ZTU3VNNrNTAE9AYjLpspNZ9SPa6NcMt1iPruHu5suP9sPJsaJ4E6A88M2DBHQasgXaWwQ5iA985kz6Jw6fgMDym5'
     dev_emulator = TrezorEmulator(emulator, model_t)
 
     if model_t:

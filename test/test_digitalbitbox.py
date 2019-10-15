@@ -40,7 +40,7 @@ def digitalbitbox_test_suite(simulator, rpc, userpass, interface):
     full_type = 'digitalbitbox'
     path = 'udp:127.0.0.1:35345'
     fingerprint = 'a31b978a'
-    master_xpub = 'xpub6BsWJiRvbzQJg3J6tgUKmHWYbHJSj41EjAAje6LuDwnYLqLiNSWK4N7rCXwiUmNJTBrKL8AEH3LBzhJdgdxoy4T9aMPLCWAa6eWKGCFjQhq'
+    master_xpub = 'xpub6CSakAox3okBzXa28kGtfabUsR6euBRJY7Q7fEjhBPomn2RQENtEzroA3pT14Ur2xavjWuDftPMDEHpf5MLSSWirfeEuuKjCCmrRPGcvNve'
 
     # DigitalBitbox specific management command tests
     class TestDBBManCommands(DeviceTestCase):
