@@ -7,7 +7,7 @@ from .trezorlib.debuglink import TrezorClientDebugLink
 from .trezorlib.exceptions import Cancelled
 from .trezorlib.transport import enumerate_devices, get_transport
 from .trezorlib.ui import echo, PassphraseUI, mnemonic_words, PIN_CURRENT, PIN_NEW, PIN_CONFIRM, PIN_MATRIX_DESCRIPTION, prompt
-from .trezorlib import tools, sys, device
+from .trezorlib import tools, syscoin, device
 from .trezorlib import messages as proto
 from ..base58 import get_xpub_fingerprint, to_address, xpub_main_2_test, get_xpub_fingerprint_hex
 from ..serializations import CTxOut, ser_uint256
@@ -122,7 +122,7 @@ class TrezorClient(HardwareWalletClient):
             expanded_path = tools.parse_path(path)
         except ValueError as e:
             raise BadArgumentError(str(e))
-        output = sys.get_public_node(self.client, expanded_path)
+        output = syscoin.get_public_node(self.client, expanded_path)
         if self.is_testnet:
             return {'xpub': xpub_main_2_test(output.xpub)}
         else:
@@ -135,7 +135,7 @@ class TrezorClient(HardwareWalletClient):
         self._check_unlocked()
 
         # Get this devices master key fingerprint
-        master_key = sys.get_public_node(self.client, [0])
+        master_key = syscoin.get_public_node(self.client, [0])
         master_fp = get_xpub_fingerprint(master_key.xpub)
 
         # Do multiple passes for multisig
@@ -309,9 +309,9 @@ class TrezorClient(HardwareWalletClient):
             tx_details.version = tx.tx.nVersion
             tx_details.lock_time = tx.tx.nLockTime
             if self.is_testnet:
-                signed_tx = sys.sign_tx(self.client, "Testnet", inputs, outputs, tx_details, prevtxs)
+                signed_tx = syscoin.sign_tx(self.client, "Testnet", inputs, outputs, tx_details, prevtxs)
             else:
-                signed_tx = sys.sign_tx(self.client, "Syscoin", inputs, outputs, tx_details, prevtxs)
+                signed_tx = syscoin.sign_tx(self.client, "Syscoin", inputs, outputs, tx_details, prevtxs)
 
             # Each input has one signature
             for input_num, (psbt_in, sig) in py_enumerate(list(zip(tx.inputs, signed_tx[0]))):
@@ -333,7 +333,7 @@ class TrezorClient(HardwareWalletClient):
     def sign_message(self, message, keypath):
         self._check_unlocked()
         path = tools.parse_path(keypath)
-        result = sys.sign_message(self.client, 'Syscoin', path, message)
+        result = syscoin.sign_message(self.client, 'Syscoin', path, message)
         return {'signature': base64.b64encode(result.signature).decode('utf-8')}
 
     # Display address of specified type on the device. Only supports single-key based addresses.
@@ -341,7 +341,7 @@ class TrezorClient(HardwareWalletClient):
     def display_address(self, keypath, p2sh_p2wpkh, bech32):
         self._check_unlocked()
         expanded_path = tools.parse_path(keypath)
-        address = sys.get_address(
+        address = syscoin.get_address(
             self.client,
             "Testnet" if self.is_testnet else "Syscoin",
             expanded_path,
