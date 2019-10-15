@@ -37,7 +37,7 @@ def start_syscoind(syscoind_path):
     # Read .cookie file to get user and pass
     with open(datadir + '/regtest/.cookie') as f:
         userpass = f.readline().lstrip().rstrip()
-    rpc = AuthServiceProxy('http://{}@127.0.0.1:18443'.format(userpass))
+    rpc = AuthServiceProxy('http://{}@127.0.0.1:18470'.format(userpass))
 
     # Wait for syscoind to be ready
     ready = False
@@ -160,11 +160,11 @@ class TestDeviceConnect(DeviceTestCase):
 
 class TestGetKeypool(DeviceTestCase):
     def setUp(self):
-        self.rpc = AuthServiceProxy('http://{}@127.0.0.1:18443'.format(self.rpc_userpass))
+        self.rpc = AuthServiceProxy('http://{}@127.0.0.1:18470'.format(self.rpc_userpass))
         if '{}_test'.format(self.full_type) not in self.rpc.listwallets():
             self.rpc.createwallet('{}_test'.format(self.full_type), True)
-        self.wrpc = AuthServiceProxy('http://{}@127.0.0.1:18443/wallet/{}_test'.format(self.rpc_userpass, self.full_type))
-        self.wpk_rpc = AuthServiceProxy('http://{}@127.0.0.1:18443/wallet/'.format(self.rpc_userpass))
+        self.wrpc = AuthServiceProxy('http://{}@127.0.0.1:18470/wallet/{}_test'.format(self.rpc_userpass, self.full_type))
+        self.wpk_rpc = AuthServiceProxy('http://{}@127.0.0.1:18470/wallet/'.format(self.rpc_userpass))
         if '--testnet' not in self.dev_args:
             self.dev_args.append('--testnet')
         self.emulator.start()
@@ -246,7 +246,7 @@ class TestGetKeypool(DeviceTestCase):
 
 class TestGetDescriptors(DeviceTestCase):
     def setUp(self):
-        self.rpc = AuthServiceProxy('http://{}@127.0.0.1:18443'.format(self.rpc_userpass))
+        self.rpc = AuthServiceProxy('http://{}@127.0.0.1:18470'.format(self.rpc_userpass))
         if '--testnet' not in self.dev_args:
             self.dev_args.append('--testnet')
         self.emulator.start()
@@ -274,11 +274,11 @@ class TestGetDescriptors(DeviceTestCase):
 
 class TestSignTx(DeviceTestCase):
     def setUp(self):
-        self.rpc = AuthServiceProxy('http://{}@127.0.0.1:18443'.format(self.rpc_userpass))
+        self.rpc = AuthServiceProxy('http://{}@127.0.0.1:18470'.format(self.rpc_userpass))
         if '{}_test'.format(self.full_type) not in self.rpc.listwallets():
             self.rpc.createwallet('{}_test'.format(self.full_type), True)
-        self.wrpc = AuthServiceProxy('http://{}@127.0.0.1:18443/wallet/{}_test'.format(self.rpc_userpass, self.full_type))
-        self.wpk_rpc = AuthServiceProxy('http://{}@127.0.0.1:18443/wallet/'.format(self.rpc_userpass))
+        self.wrpc = AuthServiceProxy('http://{}@127.0.0.1:18470/wallet/{}_test'.format(self.rpc_userpass, self.full_type))
+        self.wpk_rpc = AuthServiceProxy('http://{}@127.0.0.1:18470/wallet/'.format(self.rpc_userpass))
         if '--testnet' not in self.dev_args:
             self.dev_args.append('--testnet')
         self.emulator.start()
