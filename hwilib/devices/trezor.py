@@ -230,13 +230,13 @@ class TrezorClient(HardwareWalletClient):
 
             # address version byte
             if self.is_testnet:
-                p2pkh_version = b'\x41'
+                p2pkh_version = b'\x6f'
                 p2sh_version = b'\xc4'
-                bech32_hrp = 'tsys'
+                bech32_hrp = 'tb'
             else:
-                p2pkh_version = b'\x3F'
+                p2pkh_version = b'\x00'
                 p2sh_version = b'\x05'
-                bech32_hrp = 'sys'
+                bech32_hrp = 'bc'
 
             # prepare outputs
             outputs = []
@@ -311,7 +311,7 @@ class TrezorClient(HardwareWalletClient):
             if self.is_testnet:
                 signed_tx = syscoin.sign_tx(self.client, "Testnet", inputs, outputs, tx_details, prevtxs)
             else:
-                signed_tx = syscoin.sign_tx(self.client, "Syscoin", inputs, outputs, tx_details, prevtxs)
+                signed_tx = syscoin.sign_tx(self.client, "Bitscoin", inputs, outputs, tx_details, prevtxs)
 
             # Each input has one signature
             for input_num, (psbt_in, sig) in py_enumerate(list(zip(tx.inputs, signed_tx[0]))):
