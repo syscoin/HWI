@@ -230,13 +230,13 @@ class TrezorClient(HardwareWalletClient):
 
             # address version byte
             if self.is_testnet:
-                p2pkh_version = b'\x6f'
+                p2pkh_version = b'\x41'
                 p2sh_version = b'\xc4'
-                bech32_hrp = 'tb'
+                bech32_hrp = 'tsys'
             else:
-                p2pkh_version = b'\x00'
+                p2pkh_version = b'\x3F'
                 p2sh_version = b'\x05'
-                bech32_hrp = 'bc'
+                bech32_hrp = 'sys'
 
             # prepare outputs
             outputs = []
@@ -311,7 +311,7 @@ class TrezorClient(HardwareWalletClient):
             if self.is_testnet:
                 signed_tx = syscoin.sign_tx(self.client, "Testnet", inputs, outputs, tx_details, prevtxs)
             else:
-                signed_tx = syscoin.sign_tx(self.client, "Bitscoin", inputs, outputs, tx_details, prevtxs)
+                signed_tx = syscoin.sign_tx(self.client, "Syscoin", inputs, outputs, tx_details, prevtxs)
 
             # Each input has one signature
             for input_num, (psbt_in, sig) in py_enumerate(list(zip(tx.inputs, signed_tx[0]))):
@@ -333,7 +333,7 @@ class TrezorClient(HardwareWalletClient):
     def sign_message(self, message, keypath):
         self._check_unlocked()
         path = tools.parse_path(keypath)
-        result = syscoin.sign_message(self.client, 'Bitcoin', path, message)
+        result = syscoin.sign_message(self.client, 'Syscoin', path, message)
         return {'signature': base64.b64encode(result.signature).decode('utf-8')}
 
     # Display address of specified type on the device. Only supports single-key based addresses.
@@ -343,7 +343,7 @@ class TrezorClient(HardwareWalletClient):
         expanded_path = tools.parse_path(keypath)
         address = syscoin.get_address(
             self.client,
-            "Testnet" if self.is_testnet else "Bitcoin",
+            "Testnet" if self.is_testnet else "Syscoin",
             expanded_path,
             show_display=True,
             script_type=proto.InputScriptType.SPENDWITNESS if bech32 else (proto.InputScriptType.SPENDP2SHWITNESS if p2sh_p2wpkh else proto.InputScriptType.SPENDADDRESS)
