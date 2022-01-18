@@ -380,7 +380,7 @@ def get_bip44_chain(chain: Chain) -> int:
 
     :param chain: The chain
     """
-    if chain == Chain.MAIN:
+    if chain == 57:
         return 0
     else:
         return 1
