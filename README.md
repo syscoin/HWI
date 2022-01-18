@@ -1,6 +1,6 @@
 # Syscoin Hardware Wallet Interface
 
-[![Build Status](https://api.cirrus-ci.com/github/syscoin-core/HWI.svg)](https://cirrus-ci.com/github/syscoin-core/HWI)
+[![Build Status](https://api.cirrus-ci.com/github/syscoin/HWI.svg)](https://cirrus-ci.com/github/syscoin/HWI)
 [![Documentation Status](https://readthedocs.org/projects/hwi/badge/?version=latest)](https://hwi.readthedocs.io/en/latest/?badge=latest)
 
 The Syscoin Hardware Wallet Interface is a Python library and command line tool for interacting with hardware wallets.

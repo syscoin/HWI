@@ -14,8 +14,8 @@ device_matrix_template: &DEVICE_MATRIX_TEMPLATE
     fetch_sim_script:
       - wget -nv "https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/Trezor 1 Sim Builder/sim/trezor-firmware.tar.gz"
       - tar -xvf "trezor-firmware.tar.gz"
-      - wget -nv "https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/syscoind_builder/bitcoin/bitcoin.tar.gz"
-      - tar -xvf "bitcoin.tar.gz"
+      - wget -nv "https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/syscoind_builder/syscoin/syscoin.tar.gz"
+      - tar -xvf "syscoin.tar.gz"
   - env:
       DEVICE: --trezor-t
     depends_on:
@@ -25,8 +25,8 @@ device_matrix_template: &DEVICE_MATRIX_TEMPLATE
     fetch_sim_script:
       - wget -nv "https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/Trezor T Sim Builder/sim/trezor-firmware.tar.gz"
       - tar -xvf "trezor-firmware.tar.gz"
-      - wget -nv "https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/syscoind_builder/bitcoin/bitcoin.tar.gz"
-      - tar -xvf "bitcoin.tar.gz"
+      - wget -nv "https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/syscoind_builder/syscoin/syscoin.tar.gz"
+      - tar -xvf "syscoin.tar.gz"
   - env:
       DEVICE: --coldcard
     depends_on:
@@ -35,8 +35,8 @@ device_matrix_template: &DEVICE_MATRIX_TEMPLATE
       - syscoind_builder
     fetch_sim_script:
       - wget -nv "https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/Coldcard Sim Builder/sim/coldcard-mpy.tar.gz"
-      - wget -nv "https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/syscoind_builder/bitcoin/bitcoin.tar.gz"
-      - tar -xvf "bitcoin.tar.gz"
+      - wget -nv "https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/syscoind_builder/syscoin/syscoin.tar.gz"
+      - tar -xvf "syscoin.tar.gz"
     sim_install_script:
       - pushd test/work; git clone --recursive https://github.com/Coldcard/firmware.git; popd
       - tar -xvf "coldcard-mpy.tar.gz"
@@ -52,8 +52,8 @@ device_matrix_template: &DEVICE_MATRIX_TEMPLATE
     fetch_sim_script:
       - wget -nv "https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/Bitbox01 Sim Builder/sim/mcu.tar.gz"
       - tar -xvf "mcu.tar.gz"
-      - wget -nv "https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/syscoind_builder/bitcoin/bitcoin.tar.gz"
-      - tar -xvf "bitcoin.tar.gz"
+      - wget -nv "https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/syscoind_builder/syscoin/syscoin.tar.gz"
+      - tar -xvf "syscoin.tar.gz"
   - env:
       DEVICE: --jade
     depends_on:
@@ -63,8 +63,8 @@ device_matrix_template: &DEVICE_MATRIX_TEMPLATE
     fetch_sim_script:
       - wget -nv "https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/Jade Sim Builder/sim/jade.tar.gz"
       - tar -xvf "jade.tar.gz"
-      - wget -nv "https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/syscoind_builder/bitcoin/bitcoin.tar.gz"
-      - tar -xvf "bitcoin.tar.gz"
+      - wget -nv "https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/syscoind_builder/syscoin/syscoin.tar.gz"
+      - tar -xvf "syscoin.tar.gz"
   - env:
       DEVICE: --ledger
     depends_on:
@@ -74,8 +74,8 @@ device_matrix_template: &DEVICE_MATRIX_TEMPLATE
     fetch_sim_script:
       - wget -nv "https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/Ledger Sim Builder/sim/speculos.tar.gz"
       - tar -xvf "speculos.tar.gz"
-      - wget -nv "https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/syscoind_builder/bitcoin/bitcoin.tar.gz"
-      - tar -xvf "bitcoin.tar.gz"
+      - wget -nv "https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/syscoind_builder/syscoin/syscoin.tar.gz"
+      - tar -xvf "syscoin.tar.gz"
     sim_install_script:
       - poetry run pip install construct flask-restful jsonschema mnemonic pyelftools pillow requests
       - pip install construct flask-restful jsonschema mnemonic pyelftools pillow requests
@@ -88,8 +88,8 @@ device_matrix_template: &DEVICE_MATRIX_TEMPLATE
     fetch_sim_script:
       - wget -nv "https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/Keepkey Sim Builder/sim/keepkey-firmware.tar.gz"
       - tar -xvf "keepkey-firmware.tar.gz"
-      - wget -nv "https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/syscoind_builder/bitcoin/bitcoin.tar.gz"
-      - tar -xvf "bitcoin.tar.gz"
+      - wget -nv "https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/syscoind_builder/syscoin/syscoin.tar.gz"
+      - tar -xvf "syscoin.tar.gz"
 
 lint_task:
   test_script:
@@ -137,17 +137,17 @@ wine_builder_task:
     - find dist -type f -exec sha256sum {} \;
 
 syscoind_builder_task:
-  bitcoind_cache:
-    folder: test/work/bitcoin
+  syscoind_cache:
+    folder: test/work/syscoin
   ccache_cache:
     folder: /root/.ccache
   env:
-    BUILD_BITCOIND: 1
+    BUILD_SYSCOIND: 1
   build_script:
-    - cd test; ./setup_environment.sh --bitcoind; cd ..
-    - tar -czf bitcoin.tar.gz test/work/bitcoin
-  bitcoin_artifacts:
-    path: "bitcoin.tar.gz"
+    - cd test; ./setup_environment.sh --syscoind; cd ..
+    - tar -czf syscoin.tar.gz test/work/syscoin
+  syscoin_artifacts:
+    path: "syscoin.tar.gz"
 
 task:
   env:
