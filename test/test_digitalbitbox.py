@@ -138,7 +138,7 @@ def digitalbitbox_test_suite(simulator, rpc, userpass, interface):
             self.dev_args.remove('test')
 
         def test_getxpub(self):
-            result = self.do_command(self.dev_args + ['--expert', 'getxpub', 'm/44h/0h/0h/3'])
+            result = self.do_command(self.dev_args + ['--expert', 'getxpub', 'm/44h/57h/0h/3'])
             self.assertEqual(result['xpub'], 'xpub6Du9e5Cz1NZWz3dvsvM21tsj4xEdbAb7AcbysFL42Y3yr8PLMnsaxhetHxurTpX5Rp5RbnFFwP1wct8K3gErCUSwcxFhxThsMBSxdmkhTNf')
             self.assertFalse(result['testnet'])
             self.assertFalse(result['private'])

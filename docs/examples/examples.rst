@@ -50,11 +50,11 @@ NOTE:
 `BIP44 <https://github.com/syscoin/bips/blob/master/bip-0044.mediawiki>`_
 -------------------------------------------------------------------------
 
-1. To obtain the xpub relative to the last hardened level (m/44h/0h/0h)
+1. To obtain the xpub relative to the last hardened level (m/44h/57h/0h)
 
 ::
 
-    ./hwi.py -t "ledger" -d "IOService:/AppleACPIPlatformExpert/PCI0@0/AppleACPIPCI/XHC1@14/XHC1@14000000/HS02@14200000/Nano S@14200000/Nano S@0/IOUSBHostHIDDevice@14200000,0" getxpub  m/44h/0h/0h
+    ./hwi.py -t "ledger" -d "IOService:/AppleACPIPlatformExpert/PCI0@0/AppleACPIPCI/XHC1@14/XHC1@14000000/HS02@14200000/Nano S@14200000/Nano S@0/IOUSBHostHIDDevice@14200000,0" getxpub  m/44h/57h/0h
     => b'e0c4000000'
     <= b'1b30010208010003'9000
     => b'f026000000'
@@ -83,11 +83,11 @@ NOTE:
 `BIP49 <https://github.com/syscoin/bips/blob/master/bip-0049.mediawiki>`_
 -------------------------------------------------------------------------
 
-1. To obtain the xpub relative to the last hardened level (m/49h/0h/0h)
+1. To obtain the xpub relative to the last hardened level (m/49h/57h/0h)
 
 ::
 
-    ./hwi.py -t "ledger" -d "IOService:/AppleACPIPlatformExpert/PCI0@0/AppleACPIPCI/XHC1@14/XHC1@14000000/HS02@14200000/Nano S@14200000/Nano S@0/IOUSBHostHIDDevice@14200000,0" getxpub  m/49h/0h/0h
+    ./hwi.py -t "ledger" -d "IOService:/AppleACPIPlatformExpert/PCI0@0/AppleACPIPCI/XHC1@14/XHC1@14000000/HS02@14200000/Nano S@14200000/Nano S@0/IOUSBHostHIDDevice@14200000,0" getxpub  m/49h/57h/0h
     => b'e0c4000000'
     <= b'1b30010208010003'9000
     => b'f026000000'
@@ -116,11 +116,11 @@ NOTE:
 `BIP84 <https://github.com/syscoin/bips/blob/master/bip-0084.mediawiki>`_
 -------------------------------------------------------------------------
 
-1. To obtain the xpub relative to the last hardened level (m/84h/0h/0h)
+1. To obtain the xpub relative to the last hardened level (m/84h/57h/0h)
 
 ::
 
-    ./hwi.py -t "ledger" -d "IOService:/AppleACPIPlatformExpert/PCI0@0/AppleACPIPCI/XHC1@14/XHC1@14000000/HS02@14200000/Nano S@14200000/Nano S@0/IOUSBHostHIDDevice@14200000,0" getxpub  m/84h/0h/0h
+    ./hwi.py -t "ledger" -d "IOService:/AppleACPIPlatformExpert/PCI0@0/AppleACPIPCI/XHC1@14/XHC1@14000000/HS02@14200000/Nano S@14200000/Nano S@0/IOUSBHostHIDDevice@14200000,0" getxpub  m/84h/57h/0h
     => b'e0c4000000'
     <= b'1b30010208010003'9000
     => b'f026000000'

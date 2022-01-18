@@ -122,7 +122,7 @@ def jade_test_suite(emulator, rpc, userpass, interface):
             self.dev_args.remove("test")
 
         def test_getexpertxpub(self):
-            result = self.do_command(self.dev_args + ['--expert', 'getxpub', 'm/44h/0h/0h/3'])
+            result = self.do_command(self.dev_args + ['--expert', 'getxpub', 'm/44h/57h/0h/3'])
             self.assertEqual(result['xpub'], 'xpub6EZPQwwr93eGRt5uAN8fqNpLWtgoWM4Cn96Y7XERhRBaXus5FjuTpgGBWuvuAXp1PhYBfp7h7C7HPyuRvCyyc6wBAK7PC1Z1JVEGBnrZUXi')
             self.assertFalse(result['testnet'])
             self.assertFalse(result['private'])
@@ -136,7 +136,7 @@ def jade_test_suite(emulator, rpc, userpass, interface):
     # explicit multisig-address tests, rather than using the standard/provided ones.
     class TestJadeGetMultisigAddresses(DeviceTestCase):
         def test_getp2sh(self):
-            descriptor_param = '--desc=sh(multi(2,[1273da33/44/0h/0h]tpubDDCNstnPhbdd4vwbw5UWK3vRQSF1WXQkvBHpNXpKJAkwFYjwu735EH3GVf53qwbWimzewDUv68MUmRDgYtQ1AU8FRCPkazfuaBp7LaEaohG/3/1/11/12,[e3ebcc79/3h/1h/1]tpubDDExQpZg2tziZ7ACSBCYsY3rYxAZtTRBgWwioRLYqgNBguH6rMHN1D8epTxUQUB5kM5nxkEtr2SNic6PJLPubcGMR6S2fmDZTzL9dHpU7ka/1/3/4/5))'
+            descriptor_param = '--desc=sh(multi(2,[1273da33/44/57h/0h]tpubDDCNstnPhbdd4vwbw5UWK3vRQSF1WXQkvBHpNXpKJAkwFYjwu735EH3GVf53qwbWimzewDUv68MUmRDgYtQ1AU8FRCPkazfuaBp7LaEaohG/3/1/11/12,[e3ebcc79/3h/1h/1]tpubDDExQpZg2tziZ7ACSBCYsY3rYxAZtTRBgWwioRLYqgNBguH6rMHN1D8epTxUQUB5kM5nxkEtr2SNic6PJLPubcGMR6S2fmDZTzL9dHpU7ka/1/3/4/5))'
             result = self.do_command(self.dev_args + ['displayaddress', descriptor_param])
             self.assertEqual(result['address'], '2N2K6xGHeEYNaKEHZSBVy33g2GfUdFwJr2A')
 

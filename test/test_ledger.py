@@ -106,7 +106,7 @@ def ledger_test_suite(emulator, rpc, userpass, interface):
             self.dev_args.remove("test")
 
         def test_getxpub(self):
-            result = self.do_command(self.dev_args + ['--expert', 'getxpub', 'm/44h/0h/0h/3'])
+            result = self.do_command(self.dev_args + ['--expert', 'getxpub', 'm/44h/57h/0h/3'])
             self.assertEqual(result['xpub'], 'xpub6DqTtMuqBiBsSPb5UxB1qgJ3ViXuhoyZYhw3zTK4MywLB6psioW4PN1SAbhxVVirKQojnTBsjG5gXiiueRBgWmUuN43dpbMSgMCQHVqx2bR')
             self.assertFalse(result['testnet'])
             self.assertFalse(result['private'])

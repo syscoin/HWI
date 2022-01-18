@@ -29,14 +29,14 @@ Then in another terminal run commands similar to these, adapted to your environm
   hwi.py enumerate # this shows you the fingerprint of your hardware wallet
   FINGERPRINT_TESTNET="yourHardwareWalletFingerprint" # shown by "hwi enumerate"
   # in this example we use SEGWIT BECH32 ADDRESSES
-  DERIVATIONPATH_TESTNET=1 # testnet uses derivation paths like m/84h/1h/0h/0/* and m/84h/1h/0h/1/*
-  DERIVATIONPATH_MAINNET=0 # mainnet uses derivation paths like m/84h/0h/0h/0/* and m/84h/0h/0h/1/*
+  DERIVATIONPATH_TESTNET=1 # testnet uses derivation paths like m/84h/57h/0h/0/* and m/84h/57h/0h/1/*
+  DERIVATIONPATH_MAINNET=0 # mainnet uses derivation paths like m/84h/57h/0h/0/* and m/84h/57h/0h/1/*
   # if the mainnet path is used on testnet, it will work too, but Trezor device gives warnings 
   # of unknown address on Trezor display. This is not recommended. Use the correct derivation path
   # for the corresponding network!
   wallet=wallet.test
-  rec=$(hwi --testnet -f $FINGERPRINT_TESTNET getkeypool --addr-type wit --path m/84h/${DERIVATIONPATH_TESTNET}h/0h/0/* --keypool 0 1000)
-  chg=$(hwi --testnet -f $FINGERPRINT_TESTNET getkeypool --addr-type wit --path m/84h/${DERIVATIONPATH_TESTNET}h/0h/1/* --keypool --internal 0 1000)
+  rec=$(hwi --testnet -f $FINGERPRINT_TESTNET getkeypool --addr-type wit --path m/84h/${DERIVATIONPATH_TESTNET}h/57h/0/* --keypool 0 1000)
+  chg=$(hwi --testnet -f $FINGERPRINT_TESTNET getkeypool --addr-type wit --path m/84h/${DERIVATIONPATH_TESTNET}h/57h/1/* --keypool --internal 0 1000)
   syscoin-cli -testnet createwallet "$wallet" true
   syscoin-cli -testnet -rpcwallet="$wallet" importmulti "$rec"
   syscoin-cli -testnet -rpcwallet="$wallet" importmulti "$chg"
@@ -70,7 +70,7 @@ Send funds with Syscoin Core and Trezor using HWI
 * on the very first run it might be a good idea to verify that the wallet has been created correctly
 * on first run **verify your wallet** (optional)
 * HWI: HWI GUI -> "Display Address", since we use BECH32 address, select "P2WPKH", 
-  enter "m/84h/1h/0h/0/0" (testnet derivation path) (or "m/84h/0h/0h/0/0" on mainnet). 
+  enter "m/84h/1h/0h/0/0" (testnet derivation path) (or "m/84h/57h/0h/0/0" on mainnet). 
   This path represents the first receiving address. Click "Go". 
   In our example, it shows address "tb1q0r2gn9wzfjm5j5zshx5yp5342h928c8pmllfep".
 
@@ -91,7 +91,7 @@ Send funds with Syscoin Core and Trezor using HWI
 .. image:: Screenshot07_Core_Console-getaddressinfo.png
 
 * HWI: In HWI GUI main window click "Display Address", since we use BECH32 address, 
-  select "P2WPKH", enter "m/84h/1h/0h/1/0" (testnet derivation path) (or "m/84h/0h/0h/1/0" on mainnet).
+  select "P2WPKH", enter "m/84h/57h/0h/1/0" (testnet derivation path) (or "m/84h/57h/0h/1/0" on mainnet).
   This path represents the first change address. Click "Go". 
   In our example it shows address "tb1qca3u0ka22c934jfqw7gjr9vg4gwwjldpzatrh5".
 

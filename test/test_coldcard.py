@@ -88,7 +88,7 @@ def coldcard_test_suite(simulator, rpc, userpass, interface):
 
     class TestColdcardGetXpub(DeviceTestCase):
         def test_getxpub(self):
-            result = self.do_command(self.dev_args + ['--expert', 'getxpub', 'm/44h/0h/0h/3'])
+            result = self.do_command(self.dev_args + ['--expert', 'getxpub', 'm/44h/57h/0h/3'])
             self.assertEqual(result['xpub'], 'tpubDFHiBJDeNvqPWNJbzzxqDVXmJZoNn2GEtoVcFhMjXipQiorGUmps3e5ieDGbRrBPTFTh9TXEKJCwbAGW9uZnfrVPbMxxbFohuFzfT6VThty')
             self.assertTrue(result['testnet'])
             self.assertFalse(result['private'])
