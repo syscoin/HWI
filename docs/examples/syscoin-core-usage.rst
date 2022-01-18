@@ -18,8 +18,8 @@ Syscoin Core
 
 This method of using hardware wallets uses Syscoin Core as the wallet for monitoring the blockchain. It allows a user to use their own full node instead of relying on an SPV wallet or vendor provided software.
 
-HWI works with Syscoin Core >=0.18.0.
-However this guide will require Syscoin Core >=0.21.0 as it uses Descriptor Wallets.
+HWI works with Syscoin Core >=4.1.0.
+However this guide will require Syscoin Core >=4.1.0 as it uses Descriptor Wallets.
 
 Setup
 =====
@@ -53,7 +53,7 @@ specified, both receiving and change address descriptors are generated.
 ::
 
     $ ./hwi.py -f e5dbc9cb getkeypool 0 1000
-    [{"desc": "wpkh([e5dbc9cb/84'/0'/0']xpub6CbtS57jivMSuzcvp5YZxp6JhUU8YWup2axi2xkQRVHY8w4otp8YkEvfWBHgE5rA2AJYNHquuRoLFFdWeSi1UgVohcUeM7SkE9c8NftRwRJ/0/*)#cwyap6p3", "range": [0, 1000], "timestamp": "now", "internal": false, "keypool": true, "active": true, "watchonly": true}, {"desc": "wpkh([e5dbc9cb/84'/0'/0']xpub6CbtS57jivMSuzcvp5YZxp6JhUU8YWup2axi2xkQRVHY8w4otp8YkEvfWBHgE5rA2AJYNHquuRoLFFdWeSi1UgVohcUeM7SkE9c8NftRwRJ/1/*)#f6puu03f", "range": [0, 1000], "timestamp": "now", "internal": true, "keypool": true, "active": true, "watchonly": true}]
+    [{"desc": "wpkh([e5dbc9cb/84'/57'/0']xpub6CbtS57jivMSuzcvp5YZxp6JhUU8YWup2axi2xkQRVHY8w4otp8YkEvfWBHgE5rA2AJYNHquuRoLFFdWeSi1UgVohcUeM7SkE9c8NftRwRJ/0/*)#cwyap6p3", "range": [0, 1000], "timestamp": "now", "internal": false, "keypool": true, "active": true, "watchonly": true}, {"desc": "wpkh([e5dbc9cb/84'/57'/0']xpub6CbtS57jivMSuzcvp5YZxp6JhUU8YWup2axi2xkQRVHY8w4otp8YkEvfWBHgE5rA2AJYNHquuRoLFFdWeSi1UgVohcUeM7SkE9c8NftRwRJ/1/*)#f6puu03f", "range": [0, 1000], "timestamp": "now", "internal": true, "keypool": true, "active": true, "watchonly": true}]
 
 We now create a new Syscoin Core Descriptor Wallet and import the keys into Syscoin Core. The output is formatted properly for Syscoin Core so it can be copy and pasted.
 
@@ -64,7 +64,7 @@ We now create a new Syscoin Core Descriptor Wallet and import the keys into Sysc
       "name": "hwicoldcard",
       "warning": "Wallet is an experimental descriptor wallet"
     }
-    $ ../syscoin/src/syscoin-cli -rpcwallet=hwicoldcard importdescriptors '[{"desc": "wpkh([e5dbc9cb/84\'/0\'/0\']xpub6CbtS57jivMSuzcvp5YZxp6JhUU8YWup2axi2xkQRVHY8w4otp8YkEvfWBHgE5rA2AJYNHquuRoLFFdWeSi1UgVohcUeM7SkE9c8NftRwRJ/0/*)#cwyap6p3", "range": [0, 1000], "timestamp": "now", "internal": false, "keypool": true, "active": true, "watchonly": true}, {"desc": "wpkh([e5dbc9cb/84\'/0\'/0\']xpub6CbtS57jivMSuzcvp5YZxp6JhUU8YWup2axi2xkQRVHY8w4otp8YkEvfWBHgE5rA2AJYNHquuRoLFFdWeSi1UgVohcUeM7SkE9c8NftRwRJ/1/*)#f6puu03f", "range": [0, 1000], "timestamp": "now", "internal": true, "keypool": true, "active": true, "watchonly": true}]'
+    $ ../syscoin/src/syscoin-cli -rpcwallet=hwicoldcard importdescriptors '[{"desc": "wpkh([e5dbc9cb/84\'/57\'/0\']xpub6CbtS57jivMSuzcvp5YZxp6JhUU8YWup2axi2xkQRVHY8w4otp8YkEvfWBHgE5rA2AJYNHquuRoLFFdWeSi1UgVohcUeM7SkE9c8NftRwRJ/0/*)#cwyap6p3", "range": [0, 1000], "timestamp": "now", "internal": false, "keypool": true, "active": true, "watchonly": true}, {"desc": "wpkh([e5dbc9cb/84\'/57\'/0\']xpub6CbtS57jivMSuzcvp5YZxp6JhUU8YWup2axi2xkQRVHY8w4otp8YkEvfWBHgE5rA2AJYNHquuRoLFFdWeSi1UgVohcUeM7SkE9c8NftRwRJ/1/*)#f6puu03f", "range": [0, 1000], "timestamp": "now", "internal": true, "keypool": true, "active": true, "watchonly": true}]'
     [
       {
         "success": true
@@ -84,8 +84,8 @@ Here are some examples (``<blockheight>`` refers to a block height before the wa
     $ ../syscoin/src/syscoin-cli rescanblockchain <blockheight>
     $ ../syscoin/src/syscoin-cli rescanblockchain 500000 # Rescan from block 500000
 
-    $ ../syscoin/src/syscoin-cli -rpcwallet=hwicoldcard importdescriptors '[{"desc": "wpkh([e5dbc9cb/84\'/0\'/0\']xpub6CbtS57jivMSuzcvp5YZxp6JhUU8YWup2axi2xkQRVHY8w4otp8YkEvfWBHgE5rA2AJYNHquuRoLFFdWeSi1UgVohcUeM7SkE9c8NftRwRJ/0/*)#cwyap6p3", "range": [0, 1000], "timestamp": <blockheight>, "internal": false, "keypool": true, "active": true, "watchonly": true}, {"desc": "wpkh([e5dbc9cb/84\'/0\'/0\']xpub6CbtS57jivMSuzcvp5YZxp6JhUU8YWup2axi2xkQRVHY8w4otp8YkEvfWBHgE5rA2AJYNHquuRoLFFdWeSi1UgVohcUeM7SkE9c8NftRwRJ/1/*)#f6puu03f", "range": [0, 1000], "timestamp": <blockheight>, "internal": true, "keypool": true, "active": true, "watchonly": true}]'
-    $ ../syscoin/src/syscoin-cli -rpcwallet=hwicoldcard importdescriptors '[{"desc": "wpkh([e5dbc9cb/84\'/0\'/0\']xpub6CbtS57jivMSuzcvp5YZxp6JhUU8YWup2axi2xkQRVHY8w4otp8YkEvfWBHgE5rA2AJYNHquuRoLFFdWeSi1UgVohcUeM7SkE9c8NftRwRJ/0/*)#cwyap6p3", "range": [0, 1000], "timestamp": 500000, "internal": false, "keypool": true, "active": true, "watchonly": true}, {"desc": "wpkh([e5dbc9cb/84\'/0\'/0\']xpub6CbtS57jivMSuzcvp5YZxp6JhUU8YWup2axi2xkQRVHY8w4otp8YkEvfWBHgE5rA2AJYNHquuRoLFFdWeSi1UgVohcUeM7SkE9c8NftRwRJ/1/*)#f6puu03f", "range": [0, 1000], "timestamp": 500000, "internal": true, "keypool": true, "active": true, "watchonly": true}]' # Imports and rescans from block 500000
+    $ ../syscoin/src/syscoin-cli -rpcwallet=hwicoldcard importdescriptors '[{"desc": "wpkh([e5dbc9cb/84\'/57\'/0\']xpub6CbtS57jivMSuzcvp5YZxp6JhUU8YWup2axi2xkQRVHY8w4otp8YkEvfWBHgE5rA2AJYNHquuRoLFFdWeSi1UgVohcUeM7SkE9c8NftRwRJ/0/*)#cwyap6p3", "range": [0, 1000], "timestamp": <blockheight>, "internal": false, "keypool": true, "active": true, "watchonly": true}, {"desc": "wpkh([e5dbc9cb/84\'/57\'/0\']xpub6CbtS57jivMSuzcvp5YZxp6JhUU8YWup2axi2xkQRVHY8w4otp8YkEvfWBHgE5rA2AJYNHquuRoLFFdWeSi1UgVohcUeM7SkE9c8NftRwRJ/1/*)#f6puu03f", "range": [0, 1000], "timestamp": <blockheight>, "internal": true, "keypool": true, "active": true, "watchonly": true}]'
+    $ ../syscoin/src/syscoin-cli -rpcwallet=hwicoldcard importdescriptors '[{"desc": "wpkh([e5dbc9cb/84\'/57\'/0\']xpub6CbtS57jivMSuzcvp5YZxp6JhUU8YWup2axi2xkQRVHY8w4otp8YkEvfWBHgE5rA2AJYNHquuRoLFFdWeSi1UgVohcUeM7SkE9c8NftRwRJ/0/*)#cwyap6p3", "range": [0, 1000], "timestamp": 500000, "internal": false, "keypool": true, "active": true, "watchonly": true}, {"desc": "wpkh([e5dbc9cb/84\'/57\'/0\']xpub6CbtS57jivMSuzcvp5YZxp6JhUU8YWup2axi2xkQRVHY8w4otp8YkEvfWBHgE5rA2AJYNHquuRoLFFdWeSi1UgVohcUeM7SkE9c8NftRwRJ/1/*)#f6puu03f", "range": [0, 1000], "timestamp": 500000, "internal": true, "keypool": true, "active": true, "watchonly": true}]' # Imports and rescans from block 500000
 
 Usage
 =====
@@ -116,8 +116,8 @@ This address belongs to your hardware wallet. You can check this by doing ``geta
       "scriptPubKey": "001451a1379ddea95aa5a77e00ecc12fe64ec0aa6ab0",
       "ismine": true,
       "solvable": true,
-      "desc": "wpkh([e5dbc9cb/84'/0'/0'/0/0]0325ccb1f60a3d0640cbc3bfa1cefc34512d50c32d0e7c102b62e18f23ab69fbc5)#je3ch2kg",
-      "parent_desc": "wpkh([e5dbc9cb/84'/0'/0']xpub6CbtS57jivMSuzcvp5YZxp6JhUU8YWup2axi2xkQRVHY8w4otp8YkEvfWBHgE5rA2AJYNHquuRoLFFdWeSi1UgVohcUeM7SkE9c8NftRwRJ/0/*)#cwyap6p3",
+      "desc": "wpkh([e5dbc9cb/84'/57'/0'/0/0]0325ccb1f60a3d0640cbc3bfa1cefc34512d50c32d0e7c102b62e18f23ab69fbc5)#je3ch2kg",
+      "parent_desc": "wpkh([e5dbc9cb/84'/57'/0']xpub6CbtS57jivMSuzcvp5YZxp6JhUU8YWup2axi2xkQRVHY8w4otp8YkEvfWBHgE5rA2AJYNHquuRoLFFdWeSi1UgVohcUeM7SkE9c8NftRwRJ/0/*)#cwyap6p3",
       "iswatchonly": false,
       "isscript": false,
       "iswitness": true,
@@ -126,7 +126,7 @@ This address belongs to your hardware wallet. You can check this by doing ``geta
       "pubkey": "0325ccb1f60a3d0640cbc3bfa1cefc34512d50c32d0e7c102b62e18f23ab69fbc5",
       "ischange": false,
       "timestamp": 1614190663,
-      "hdkeypath": "m/84'/0'/0'/0/0",
+      "hdkeypath": "m/84'/57'/0'/0/0",
       "hdseedid": "0000000000000000000000000000000000000000",
       "hdmasterfingerprint": "e5dbc9cb",
       "labels": [
@@ -276,9 +276,9 @@ Derivation Path BIP Compliance
 ==============================
 
 The instructions above use BIP 84 to derive keys used for P2WPKH addresses (bech32 addresses).
-HWI follows BIPs 44, 84, and 49. By default, descriptors will be for P2WPKH addresses with keys derived at ``m/84h/0h/0h/0`` for normal receiving keys and ``m/84h/0h/0h/1`` for change keys.
-Using the ``--addr-type legacy`` option will result in P2PKH addresses with keys derived at ``m/44h/0h/0h/0`` for normal receiving keys and ``m/44h/0h/0h/1`` for change keys.
-Using the ``--addr-type sh_wit`` option will result in P2SH nested P2WPKH addresses with keys derived at ``m/49h/0h/0h/0`` for normal receiving keys and ``m/49h/0h/0h/1`` for change keys.
+HWI follows BIPs 44, 84, and 49. By default, descriptors will be for P2WPKH addresses with keys derived at ``m/84h/57h/0h/0`` for normal receiving keys and ``m/84h/57h/0h/1`` for change keys.
+Using the ``--addr-type legacy`` option will result in P2PKH addresses with keys derived at ``m/44h/57h/0h/0`` for normal receiving keys and ``m/44h/57h/0h/1`` for change keys.
+Using the ``--addr-type sh_wit`` option will result in P2SH nested P2WPKH addresses with keys derived at ``m/49h/57h/0h/0`` for normal receiving keys and ``m/49h/57h/0h/1`` for change keys.
 
 To actually get the correct address type when using ``getnewaddress`` from Syscoin Core, you will need to additionally set ``-addresstype=p2sh-segwit`` and ``-changetype=p2sh-segwit``.
 This can be set in the command line (as shown in the example) or in your syscoin.conf file.
