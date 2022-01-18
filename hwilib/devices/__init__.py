@@ -3,5 +3,7 @@ __all__ = [
     'ledger',
     'keepkey',
     'digitalbitbox',
-    'coldcard'
+    'coldcard',
+    'bitbox02',
+    'jade'
 ]

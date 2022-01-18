@@ -1,4 +1,7 @@
-# Digital Bitbox interaction script
+"""
+BitBox01
+********
+"""
 
 import hid
 import struct
@@ -13,11 +16,56 @@ import logging
 import socket
 import sys
 import time
+from functools import wraps
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Tuple,
+    Union,
+)
 
+from ..common import (
+    AddressType,
+    Chain,
+    hash256,
+)
+from ..descriptor import MultisigDescriptor
 from ..hwwclient import HardwareWalletClient
-from ..errors import ActionCanceledError, BadArgumentError, DeviceFailureError, DeviceAlreadyInitError, DEVICE_NOT_INITIALIZED, DeviceNotReadyError, NoPasswordError, UnavailableActionError, common_err_msgs, handle_errors
-from ..serializations import CTransaction, hash256, ser_sig_der, ser_sig_compact, ser_compact_size
-from ..base58 import get_xpub_fingerprint, xpub_main_2_test, get_xpub_fingerprint_hex
+from ..errors import (
+    ActionCanceledError,
+    BadArgumentError,
+    DeviceFailureError,
+    DeviceAlreadyInitError,
+    DEVICE_NOT_INITIALIZED,
+    DeviceNotReadyError,
+    NoPasswordError,
+    UnavailableActionError,
+    common_err_msgs,
+    handle_errors,
+)
+from ..key import (
+    ExtendedKey,
+)
+from .._script import (
+    is_p2pk,
+    is_p2pkh,
+    is_p2sh,
+    is_p2wpkh,
+    is_p2wsh,
+    is_witness,
+)
+from ..psbt import PSBT
+from ..tx import (
+    CTransaction,
+)
+from .._serialize import (
+    ser_sig_der,
+    ser_sig_compact,
+    ser_string,
+    ser_compact_size,
+)
 
 applen = 225280 # flash size minus bootloader length
 chunksize = 8 * 512
@@ -32,7 +80,7 @@ DBB_VENDOR_ID = 0x03eb
 DBB_DEVICE_ID = 0x2402
 
 # Errors codes from the device
-bad_args = [
+bad_args: List[Union[int, str]] = [
     102, # The password length must be at least " STRINGIFY(PASSWORD_LEN_MIN) " characters.
     103, # No input received.
     104, # Invalid command.
@@ -51,7 +99,9 @@ bad_args = [
     251, # Could not generate key.
 ]
 
-device_failures = [
+bad_args.extend([str(x) for x in bad_args])
+
+device_failures: List[Union[int, str]] = [
     101, # Please set a password.
     107, # Output buffer overflow.
     200, # Seed creation requires an SD card for automatic encrypted backup of the seed.
@@ -78,29 +128,36 @@ device_failures = [
     903, # attempts remain before the device is reset. The next login requires holding the touch button.
 ]
 
-cancels = [
+device_failures.extend([str(x) for x in device_failures])
+
+cancels: List[Union[int, str]] = [
     600, # Aborted by user.
     601, # Touchbutton timed out.
 ]
 
+cancels.extend([str(x) for x in cancels])
+
 ERR_MEM_SETUP = 503 # Device initialization in progress.
 
 class DBBError(Exception):
-    def __init__(self, error):
+    def __init__(self, error: Dict[str, Dict[str, Union[str, int]]]) -> None:
         Exception.__init__(self)
         self.error = error
 
-    def get_error(self):
+    def get_error(self) -> str:
+        assert isinstance(self.error["error"]["message"], str)
         return self.error['error']['message']
 
-    def get_code(self):
+    def get_code(self) -> Union[str, int]:
+        assert isinstance(self.error["error"]["code"], int) or isinstance(self.error["error"]["code"], str)
         return self.error['error']['code']
 
-    def __str__(self):
+    def __str__(self) -> str:
         return 'Error: {}, Code: {}'.format(self.error['error']['message'], self.error['error']['code'])
 
-def digitalbitbox_exception(f):
-    def func(*args, **kwargs):
+def digitalbitbox_exception(f: Callable[..., Any]) -> Any:
+    @wraps(f)
+    def func(*args: Any, **kwargs: Any) -> Any:
         try:
             return f(*args, **kwargs)
         except DBBError as e:
@@ -110,52 +167,51 @@ def digitalbitbox_exception(f):
                 raise DeviceFailureError(e.get_error())
             elif e.get_code() in cancels:
                 raise ActionCanceledError(e.get_error())
-            elif e.get_code() == ERR_MEM_SETUP:
+            elif e.get_code() == ERR_MEM_SETUP or e.get_code() == str(ERR_MEM_SETUP):
                 raise DeviceNotReadyError(e.get_error())
 
     return func
 
-def aes_encrypt_with_iv(key, iv, data):
+def aes_encrypt_with_iv(key: bytes, iv: bytes, data: bytes) -> bytes:
     aes_cbc = pyaes.AESModeOfOperationCBC(key, iv=iv)
     aes = pyaes.Encrypter(aes_cbc)
     e = aes.feed(data) + aes.feed()  # empty aes.feed() appends pkcs padding
+    assert isinstance(e, bytes)
     return e
 
 
-def aes_decrypt_with_iv(key, iv, data):
+def aes_decrypt_with_iv(key: bytes, iv: bytes, data: bytes) -> bytes:
     aes_cbc = pyaes.AESModeOfOperationCBC(key, iv=iv)
     aes = pyaes.Decrypter(aes_cbc)
     s = aes.feed(data) + aes.feed()  # empty aes.feed() strips pkcs padding
+    assert isinstance(s, bytes)
     return s
 
-def encrypt_aes(secret, s):
+def encrypt_aes(secret: bytes, s: bytes) -> bytes:
     iv = bytes(os.urandom(16))
     ct = aes_encrypt_with_iv(secret, iv, s)
     e = iv + ct
     return e
 
-def decrypt_aes(secret, e):
+def decrypt_aes(secret: bytes, e: bytes) -> bytes:
     iv, e = e[:16], e[16:]
     s = aes_decrypt_with_iv(secret, iv, e)
     return s
 
-def sha256(x):
-    return hashlib.sha256(x).digest()
-
-def sha512(x):
+def sha512(x: bytes) -> bytes:
     return hashlib.sha512(x).digest()
 
-def double_hash(x):
-    if type(x) is not bytearray:
+def double_hash(x: Union[str, bytes]) -> bytes:
+    if not isinstance(x, bytes):
         x = x.encode('utf-8')
-    return sha256(sha256(x))
+    return hash256(x)
 
-def derive_keys(x):
+def derive_keys(x: str) -> Tuple[bytes, bytes]:
     h = double_hash(x)
     h = sha512(h)
     return (h[:len(h) // 2], h[len(h) // 2:])
 
-def to_string(x, enc):
+def to_string(x: Union[str, bytes, bytearray], enc: str) -> str:
     if isinstance(x, (bytes, bytearray)):
         return x.decode(enc)
     if isinstance(x, str):
@@ -164,30 +220,32 @@ def to_string(x, enc):
         raise DeviceFailureError("Not a string or bytes like object")
 
 class BitboxSimulator():
-    def __init__(self, ip, port):
+    def __init__(self, ip: str, port: int) -> None:
         self.ip = ip
         self.port = port
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.socket.connect((self.ip, self.port))
         self.socket.settimeout(1)
 
-    def send_recv(self, msg):
+    def send_recv(self, msg: bytes) -> bytes:
         self.socket.sendall(msg)
         data = self.socket.recv(3584)
         return data
 
-    def close(self):
+    def close(self) -> None:
         self.socket.close()
 
-    def get_serial_number_string(self):
+    def get_serial_number_string(self) -> str:
         return 'dbb_fw:v5.0.0'
 
-def send_frame(data, device):
+Device = Union[BitboxSimulator, hid.device]
+
+def send_frame(data: bytes, device: hid.device) -> None:
     data = bytearray(data)
     data_len = len(data)
     seq = 0
     idx = 0
-    write = []
+    write = b""
     while idx < data_len:
         if idx == 0:
             # INIT frame
@@ -201,7 +259,7 @@ def send_frame(data, device):
         idx += len(write)
 
 
-def read_frame(device):
+def read_frame(device: hid.device) -> bytes:
     # INIT response
     read = bytearray(device.read(usb_report_size))
     cid = ((read[0] * 256 + read[1]) * 256 + read[2]) * 256 + read[3]
@@ -218,15 +276,14 @@ def read_frame(device):
     assert cmd == HWW_CMD, '- USB command frame mismatch'
     return data
 
-def get_firmware_version(device):
+def get_firmware_version(device: Device) -> Tuple[int, int, int]:
     serial_number = device.get_serial_number_string()
     split_serial = serial_number.split(':')
     firm_ver = split_serial[1][1:] # Version is vX.Y.Z, we just need X.Y.Z
     split_ver = firm_ver.split('.')
     return (int(split_ver[0]), int(split_ver[1]), int(split_ver[2])) # major, minor, revision
 
-def send_plain(msg, device):
-    reply = ""
+def send_plain(msg: bytes, device: Device) -> Dict[str, Any]:
     try:
         if isinstance(device, BitboxSimulator):
             r = device.send_recv(msg)
@@ -234,7 +291,7 @@ def send_plain(msg, device):
             firm_ver = get_firmware_version(device)
             if (firm_ver[0] == 2 and firm_ver[1] == 0) or (firm_ver[0] == 1):
                 hidBufSize = 4096
-                device.write('\0' + msg + '\0' * (hidBufSize - len(msg)))
+                device.write(b"\0" + msg + b"\0" * (hidBufSize - len(msg)))
                 r = bytearray()
                 while len(r) < hidBufSize:
                     r += bytearray(device.read(hidBufSize))
@@ -243,14 +300,14 @@ def send_plain(msg, device):
                 r = read_frame(device)
         r = r.rstrip(b' \t\r\n\0')
         r = r.replace(b"\0", b'')
-        r = to_string(r, 'utf8')
-        reply = json.loads(r)
+        result = json.loads(to_string(r, "utf8"))
+        assert isinstance(result, dict)
+        return result
     except Exception as e:
-        reply = json.loads('{"error":"Exception caught while sending plaintext message to DigitalBitbox ' + str(e) + '"}')
-    return reply
+        return {"error": f"Exception caught while sending plaintext message to DigitalBitbox {str(e)}"}
 
-def send_encrypt(msg, password, device):
-    reply = ""
+def send_encrypt(message: str, password: str, device: Device) -> Dict[str, Any]:
+    msg = message.encode("utf8")
     try:
         firm_ver = get_firmware_version(device)
         if firm_ver[0] >= 5:
@@ -272,80 +329,111 @@ def send_encrypt(msg, password, device):
                     raise Exception("Failed to validate HMAC")
             else:
                 msg = b64_unencoded
-            reply = decrypt_aes(encryption_key, msg)
-            reply = json.loads(reply.decode("utf-8"))
-        if 'error' in reply:
-            password = None
+            plaintext = decrypt_aes(encryption_key, msg)
+            result = json.loads(plaintext.decode("utf-8"))
+            assert isinstance(result, dict)
+            return result
+        else:
+            return reply
     except Exception as e:
-        reply = {'error': 'Exception caught while sending encrypted message to DigitalBitbox ' + str(e)}
-    return reply
+        return {'error': 'Exception caught while sending encrypted message to DigitalBitbox ' + str(e)}
 
-def stretch_backup_key(password):
+def stretch_backup_key(password: str) -> str:
     key = hashlib.pbkdf2_hmac('sha512', password.encode(), b'Digital Bitbox', 20480)
     return binascii.hexlify(key).decode()
 
-def format_backup_filename(name):
+def format_backup_filename(name: str) -> str:
     return '{}-{}.pdf'.format(name, time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime()))
 
 # This class extends the HardwareWalletClient for Digital Bitbox specific things
 class DigitalbitboxClient(HardwareWalletClient):
 
-    def __init__(self, path, password):
-        super(DigitalbitboxClient, self).__init__(path, password)
+    def __init__(self, path: str, password: str, expert: bool = False) -> None:
+        """
+        The `DigitalbitboxClient` is a `HardwareWalletClient` for interacting with BitBox01 devices (previously known as the Digital BitBox).
+
+        :param path: Path to the device as given by `enumerate`
+        :param password: The password required to communicate with the device. Must be provided.
+        :param expert: Whether to be in expert mode and return additional information.
+        """
+        super(DigitalbitboxClient, self).__init__(path, password, expert)
         if not password:
             raise NoPasswordError('Password must be supplied for digital BitBox')
         if path.startswith('udp:'):
             split_path = path.split(':')
             ip = split_path[1]
             port = int(split_path[2])
-            self.device = BitboxSimulator(ip, port)
+            self.device: Device = BitboxSimulator(ip, port)
         else:
             self.device = hid.device()
             self.device.open_path(path.encode())
         self.password = password
 
-    # Must return a dict with the xpub
-    # Retrieves the public key at the specified BIP 32 derivation path
     @digitalbitbox_exception
-    def get_pubkey_at_path(self, path):
+    def get_pubkey_at_path(self, path: str) -> ExtendedKey:
+        """
+        Retrieve the public key at the path.
+        The BitBox01 requires that at least one of the levels in the path is hardened.
+
+        :param path: Path to retrieve the public key at.
+        """
         if '\'' not in path and 'h' not in path and 'H' not in path:
             raise BadArgumentError('The digital bitbox requires one part of the derivation path to be derived using hardened keys')
         reply = send_encrypt('{"xpub":"' + path + '"}', self.password, self.device)
         if 'error' in reply:
             raise DBBError(reply)
 
-        if self.is_testnet:
-            return {'xpub': xpub_main_2_test(reply['xpub'])}
-        else:
-            return {'xpub': reply['xpub']}
+        xpub = ExtendedKey.deserialize(reply["xpub"])
+        if self.chain != Chain.MAIN:
+            xpub.version = ExtendedKey.TESTNET_PUBLIC
+        return xpub
 
-    # Must return a hex string with the signed transaction
-    # The tx must be in the PSBT format
     @digitalbitbox_exception
-    def sign_tx(self, tx):
+    def sign_tx(self, tx: PSBT) -> PSBT:
 
         # Create a transaction with all scriptsigs blanekd out
         blank_tx = CTransaction(tx.tx)
 
         # Get the master key fingerprint
-        master_fp = get_xpub_fingerprint(self.get_pubkey_at_path('m/0h')['xpub'])
+        master_fp = self.get_master_fingerprint()
 
         # create sighashes
         sighash_tuples = []
         for txin, psbt_in, i_num in zip(blank_tx.vin, tx.inputs, range(len(blank_tx.vin))):
             sighash = b""
+            utxo = None
+            if psbt_in.witness_utxo:
+                utxo = psbt_in.witness_utxo
             if psbt_in.non_witness_utxo:
+                if txin.prevout.hash != psbt_in.non_witness_utxo.sha256:
+                    raise BadArgumentError('Input {} has a non_witness_utxo with the wrong hash'.format(i_num))
                 utxo = psbt_in.non_witness_utxo.vout[txin.prevout.n]
+            if utxo is None:
+                continue
+            scriptcode = utxo.scriptPubKey
 
-                # Check if P2SH
-                if utxo.is_p2sh():
-                    # Look up redeemscript
-                    redeemscript = psbt_in.redeem_script
+            # Check if P2SH
+            p2sh = False
+            if is_p2sh(scriptcode):
+                # Look up redeemscript
+                if len(psbt_in.redeem_script) == 0:
+                    continue
+                scriptcode = psbt_in.redeem_script
+                p2sh = True
+
+            is_wit, _, _ = is_witness(scriptcode)
+
+            # Check if P2WSH
+            if is_p2wsh(scriptcode):
+                # Look up witnessscript
+                if len(psbt_in.witness_script) == 0:
+                    continue
+                scriptcode = psbt_in.witness_script
+
+            if not is_wit:
+                if p2sh or is_p2pkh(scriptcode) or is_p2pk(scriptcode):
                     # Add to blank_tx
-                    txin.scriptSig = redeemscript
-                # Check if P2PKH
-                elif utxo.is_p2pkh() or utxo.is_p2pk():
-                    txin.scriptSig = psbt_in.non_witness_utxo.vout[txin.prevout.n].scriptPubKey
+                    txin.scriptSig = scriptcode
                 # We don't know what this is, skip it
                 else:
                     continue
@@ -357,7 +445,8 @@ class DigitalbitboxClient(HardwareWalletClient):
                 # Hash it
                 sighash += hash256(ser_tx)
                 txin.scriptSig = b""
-            elif psbt_in.witness_utxo:
+            else:
+                assert psbt_in.witness_utxo is not None
                 # Calculate hashPrevouts and hashSequence
                 prevouts_preimage = b""
                 sequence_preimage = b""
@@ -373,25 +462,10 @@ class DigitalbitboxClient(HardwareWalletClient):
                     outputs_preimage += output.serialize()
                 hashOutputs = hash256(outputs_preimage)
 
-                # Get the scriptCode
-                scriptCode = b""
-                witness_program = b""
-                if psbt_in.witness_utxo.is_p2sh():
-                    # Look up redeemscript
-                    redeemscript = psbt_in.redeem_script
-                    witness_program = redeemscript
-                else:
-                    witness_program = psbt_in.witness_utxo.scriptPubKey
-
-                # Check if witness_program is script hash
-                if len(witness_program) == 34 and witness_program[0] == 0x00 and witness_program[1] == 0x20:
-                    # look up witnessscript and set as scriptCode
-                    witnessscript = psbt_in.witness_script
-                    scriptCode += ser_compact_size(len(witnessscript)) + witnessscript
-                else:
-                    scriptCode += b"\x19\x76\xa9\x14"
-                    scriptCode += witness_program[2:]
-                    scriptCode += b"\x88\xac"
+                # Check if scriptcode is p2wpkh
+                if is_p2wpkh(scriptcode):
+                    _, _, wit_prog = is_witness(scriptcode)
+                    scriptcode = b"\x76\xa9\x14" + wit_prog + b"\x88\xac"
 
                 # Make sighash preimage
                 preimage = b""
@@ -399,7 +473,7 @@ class DigitalbitboxClient(HardwareWalletClient):
                 preimage += hashPrevouts
                 preimage += hashSequence
                 preimage += txin.prevout.serialize()
-                preimage += scriptCode
+                preimage += ser_string(scriptcode)
                 preimage += struct.pack("<q", psbt_in.witness_utxo.nValue)
                 preimage += struct.pack("<I", txin.nSequence)
                 preimage += hashOutputs
@@ -411,15 +485,9 @@ class DigitalbitboxClient(HardwareWalletClient):
 
             # Figure out which keypath thing is for this input
             for pubkey, keypath in psbt_in.hd_keypaths.items():
-                if master_fp == keypath[0]:
+                if master_fp == keypath.fingerprint:
                     # Add the keypath strings
-                    keypath_str = 'm'
-                    for index in keypath[1:]:
-                        keypath_str += '/'
-                        if index >= 0x80000000:
-                            keypath_str += str(index - 0x80000000) + 'h'
-                        else:
-                            keypath_str += str(index)
+                    keypath_str = keypath.get_derivation_path()
 
                     # Create tuples and add to List
                     tup = (binascii.hexlify(sighash).decode(), keypath_str, i_num, pubkey)
@@ -427,7 +495,7 @@ class DigitalbitboxClient(HardwareWalletClient):
 
         # Return early if nothing to do
         if len(sighash_tuples) == 0:
-            return {'psbt': tx.serialize()}
+            return tx
 
         # Sign the sighashes
         to_send = '{"sign":{"data":['
@@ -466,16 +534,17 @@ class DigitalbitboxClient(HardwareWalletClient):
         for tup, sig in zip(sighash_tuples, der_sigs):
             tx.inputs[tup[2]].partial_sigs[tup[3]] = sig
 
-        return {'psbt': tx.serialize()}
+        return tx
 
-    # Must return a base64 encoded string with the signed message
-    # The message can be any string
     @digitalbitbox_exception
-    def sign_message(self, message, keypath):
+    def sign_message(self, message: Union[str, bytes], keypath: str) -> str:
         to_hash = b""
         to_hash += self.message_magic
         to_hash += ser_compact_size(len(message))
-        to_hash += message.encode()
+        if isinstance(message, bytes):
+            to_hash += message
+        else:
+            to_hash += message.encode()
 
         hashed_message = hash256(to_hash)
 
@@ -502,18 +571,29 @@ class DigitalbitboxClient(HardwareWalletClient):
         compact_sig = ser_sig_compact(r, s, recid)
         logging.debug(binascii.hexlify(compact_sig))
 
-        return {"signature": base64.b64encode(compact_sig).decode('utf-8')}
+        return base64.b64encode(compact_sig).decode('utf-8')
 
-    # Display address of specified type on the device. Only supports single-key based addresses.
-    def display_address(self, keypath, p2sh_p2wpkh, bech32):
+    def display_singlesig_address(self, keypath: str, addr_type: AddressType) -> str:
+        """
+        The BitBox01 does not have a screen to display addresses on.
+
+        :raises UnavailableActionError: Always, this function is unavailable
+        """
         raise UnavailableActionError('The Digital Bitbox does not have a screen to display addresses on')
 
-    # Setup a new device
+    def display_multisig_address(self, addr_type: AddressType, multisig: MultisigDescriptor) -> str:
+        """
+        The BitBox01 does not have a screen to display addresses on.
+
+        :raises UnavailableActionError: Always, this function is unavailable
+        """
+        raise UnavailableActionError('The Digital Bitbox does not have a screen to display addresses on')
+
     @digitalbitbox_exception
-    def setup_device(self, label='', passphrase=''):
+    def setup_device(self, label: str = "", passphrase: str = "") -> bool:
         # Make sure this is not initialized
         reply = send_encrypt('{"device" : "info"}', self.password, self.device)
-        if 'error' not in reply or ('error' in reply and reply['error']['code'] != 101):
+        if 'error' not in reply or ('error' in reply and (reply['error']['code'] != 101 and reply['error']['code'] != '101')):
             raise DeviceAlreadyInitError('Device is already initialized. Use wipe first and try again')
 
         # Need a wallet name and backup passphrase
@@ -521,33 +601,35 @@ class DigitalbitboxClient(HardwareWalletClient):
             raise BadArgumentError('The label and backup passphrase for a new Digital Bitbox wallet must be specified and cannot be empty')
 
         # Set password
-        to_send = {'password': self.password}
+        to_send: Dict[str, Any] = {'password': self.password}
         reply = send_plain(json.dumps(to_send).encode(), self.device)
 
         # Now make the wallet
         key = stretch_backup_key(passphrase)
         backup_filename = format_backup_filename(label)
         to_send = {'seed': {'source': 'create', 'key': key, 'filename': backup_filename}}
-        reply = send_encrypt(json.dumps(to_send).encode(), self.password, self.device)
+        reply = send_encrypt(json.dumps(to_send), self.password, self.device)
         if 'error' in reply:
-            return {'success': False, 'error': reply['error']['message']}
-        return {'success': True}
+            raise DeviceFailureError(reply['error']['message'])
+        return True
 
-    # Wipe this device
     @digitalbitbox_exception
-    def wipe_device(self):
+    def wipe_device(self) -> bool:
         reply = send_encrypt('{"reset" : "__ERASE__"}', self.password, self.device)
         if 'error' in reply:
-            return {'success': False, 'error': reply['error']['message']}
-        return {'success': True}
+            raise DeviceFailureError(reply["error"]["message"])
+        return True
 
-    # Restore device from mnemonic or xprv
-    def restore_device(self, label=''):
+    def restore_device(self, label: str = "", word_count: int = 24) -> bool:
+        """
+        The BitBox01 does not support restoring via software.
+
+        :raises UnavailableActionError: Always, this function is unavailable
+        """
         raise UnavailableActionError('The Digital Bitbox does not support restoring via software')
 
-    # Begin backup process
     @digitalbitbox_exception
-    def backup_device(self, label='', passphrase=''):
+    def backup_device(self, label: str = "", passphrase: str = "") -> bool:
         # Need a wallet name and backup passphrase
         if not label or not passphrase:
             raise BadArgumentError('The label and backup passphrase for a Digital Bitbox backup must be specified and cannot be empty')
@@ -555,24 +637,48 @@ class DigitalbitboxClient(HardwareWalletClient):
         key = stretch_backup_key(passphrase)
         backup_filename = format_backup_filename(label)
         to_send = {'backup': {'source': 'all', 'key': key, 'filename': backup_filename}}
-        reply = send_encrypt(json.dumps(to_send).encode(), self.password, self.device)
+        reply = send_encrypt(json.dumps(to_send), self.password, self.device)
         if 'error' in reply:
             raise DBBError(reply)
-        return {'success': True}
+        return True
 
-    # Close the device
-    def close(self):
+    def close(self) -> None:
         self.device.close()
 
-    # Prompt pin
-    def prompt_pin(self):
+    def prompt_pin(self) -> bool:
+        """
+        The BitBox01 does not need a PIN sent from the host.
+
+        :raises UnavailableActionError: Always, this function is unavailable
+        """
         raise UnavailableActionError('The Digital Bitbox does not need a PIN sent from the host')
 
-    # Send pin
-    def send_pin(self, pin):
+    def send_pin(self, pin: str) -> bool:
+        """
+        The BitBox01 does not need a PIN sent from the host.
+
+        :raises UnavailableActionError: Always, this function is unavailable
+        """
         raise UnavailableActionError('The Digital Bitbox does not need a PIN sent from the host')
 
-def enumerate(password=''):
+    def toggle_passphrase(self) -> bool:
+        """
+        The BitBox01 does not support toggling passphrase from the host.
+
+        :raises UnavailableActionError: Always, this function is unavailable
+        """
+        raise UnavailableActionError('The Digital Bitbox does not support toggling passphrase from the host')
+
+    def can_sign_taproot(self) -> bool:
+        """
+        The BitBox01 does not support Taproot as it is no longer supported by the manufacturer
+
+        :returns: False, always
+        """
+        return False
+
+
+def enumerate(password: str = "") -> List[Dict[str, Any]]:
     results = []
     devices = hid.enumerate(DBB_VENDOR_ID, DBB_DEVICE_ID)
     # Try connecting to simulator
@@ -581,16 +687,17 @@ def enumerate(password=''):
         dev.send_recv(b'{"device" : "info"}')
         devices.append({'path': b'udp:127.0.0.1:35345', 'interface_number': 0})
         dev.close()
-    except:
+    except Exception:
         pass
     for d in devices:
         if ('interface_number' in d and d['interface_number'] == 0
                 or ('usage_page' in d and d['usage_page'] == 0xffff)):
-            d_data = {}
+            d_data: Dict[str, Any] = {}
 
             path = d['path'].decode()
             d_data['type'] = 'digitalbitbox'
             d_data['model'] = 'digitalbitbox_01'
+            d_data['label'] = None
             if path == 'udp:127.0.0.1:35345':
                 d_data['model'] += '_simulator'
             d_data['path'] = path
@@ -601,12 +708,11 @@ def enumerate(password=''):
 
                 # Check initialized
                 reply = send_encrypt('{"device" : "info"}', password, client.device)
-                if 'error' in reply and reply['error']['code'] == 101:
+                if 'error' in reply and (reply['error']['code'] == 101 or reply['error']['code'] == '101'):
                     d_data['error'] = 'Not initialized'
                     d_data['code'] = DEVICE_NOT_INITIALIZED
                 else:
-                    master_xpub = client.get_pubkey_at_path('m/0h')['xpub']
-                    d_data['fingerprint'] = get_xpub_fingerprint_hex(master_xpub)
+                    d_data['fingerprint'] = client.get_master_fingerprint().hex()
                 d_data['needs_pin_sent'] = False
                 d_data['needs_passphrase_sent'] = True
 

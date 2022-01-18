@@ -1,6 +1,6 @@
 # This file is part of the Trezor project.
 #
-# Copyright (C) 2012-2018 SatoshiLabs and contributors
+# Copyright (C) 2012-2022 SatoshiLabs and contributors
 #
 # This library is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License version 3
@@ -14,54 +14,78 @@
 # You should have received a copy of the License along with this library.
 # If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.
 
-'''
-Extremely minimal streaming codec for a subset of protobuf.  Supports uint32,
-bytes, string, embedded message and repeated fields.
+"""
+Extremely minimal streaming codec for a subset of protobuf.
+Supports uint32, bytes, string, embedded message and repeated fields.
 
-For de-sererializing (loading) protobuf types, object with `Reader`
-interface is required:
+For de-serializing (loading) protobuf types, object with `Reader` interface is required.
+For serializing (dumping) protobuf types, object with `Writer` interface is required.
+"""
 
->>> class Reader:
->>>     def readinto(self, buffer):
->>>         """
->>>         Reads `len(buffer)` bytes into `buffer`, or raises `EOFError`.
->>>         """
-
-For serializing (dumping) protobuf types, object with `Writer` interface is
-required:
-
->>> class Writer:
->>>     def write(self, buffer):
->>>         """
->>>         Writes all bytes from `buffer`, or raises `EOFError`.
->>>         """
-'''
-
+import logging
+import warnings
+from dataclasses import dataclass
+from enum import IntEnum
 from io import BytesIO
-from typing import Any, Optional
+from itertools import zip_longest
+from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar, Union
+
+from typing_extensions import Protocol, TypeGuard
+
+T = TypeVar("T", bound=type)
+MT = TypeVar("MT", bound="MessageType")
+
+
+class Reader(Protocol):
+    def readinto(self, __buf: bytearray) -> int:
+        """
+        Reads exactly `len(buffer)` bytes into `buffer`. Returns number of bytes read,
+        or 0 if it cannot read that much.
+        """
+        ...
+
+
+class Writer(Protocol):
+    def write(self, __buf: bytes) -> int:
+        """
+        Writes all bytes from `buffer`, or raises `EOFError`
+        """
+        ...
+
 
 _UVARINT_BUFFER = bytearray(1)
 
+LOG = logging.getLogger(__name__)
 
-def load_uvarint(reader):
+
+def safe_issubclass(value: Any, cls: Union[T, Tuple[T, ...]]) -> TypeGuard[T]:
+    return isinstance(value, type) and issubclass(value, cls)
+
+
+def load_uvarint(reader: Reader) -> int:
     buffer = _UVARINT_BUFFER
     result = 0
     shift = 0
     byte = 0x80
+    bytes_read = 0
     while byte & 0x80:
         if reader.readinto(buffer) == 0:
-            raise EOFError
+            if bytes_read > 0:
+                raise IOError("Interrupted UVarint")
+            else:
+                raise EOFError
+        bytes_read += 1
         byte = buffer[0]
         result += (byte & 0x7F) << shift
         shift += 7
     return result
 
 
-def dump_uvarint(writer, n):
+def dump_uvarint(writer: Writer, n: int) -> None:
     if n < 0:
         raise ValueError("Cannot dump signed value, convert it to unsigned first.")
     buffer = _UVARINT_BUFFER
-    shifted = True
+    shifted = 1
     while shifted:
         shifted = n >> 7
         buffer[0] = (n & 0x7F) | (0x80 if shifted else 0x00)
@@ -89,14 +113,14 @@ def dump_uvarint(writer, n):
 # So we have to branch on whether the number is negative.
 
 
-def sint_to_uint(sint):
+def sint_to_uint(sint: int) -> int:
     res = sint << 1
     if sint < 0:
         res = ~res
     return res
 
 
-def uint_to_sint(uint):
+def uint_to_sint(uint: int) -> int:
     sign = uint & 1
     res = uint >> 1
     if sign:
@@ -104,84 +128,136 @@ def uint_to_sint(uint):
     return res
 
 
-class UVarintType:
-    WIRE_TYPE = 0
+WIRE_TYPE_INT = 0
+WIRE_TYPE_LENGTH = 2
+
+WIRE_TYPES = {
+    "uint32": WIRE_TYPE_INT,
+    "uint64": WIRE_TYPE_INT,
+    "sint32": WIRE_TYPE_INT,
+    "sint64": WIRE_TYPE_INT,
+    "bool": WIRE_TYPE_INT,
+    "bytes": WIRE_TYPE_LENGTH,
+    "string": WIRE_TYPE_LENGTH,
+}
+
+REQUIRED_FIELD_PLACEHOLDER = object()
 
 
-class SVarintType:
-    WIRE_TYPE = 0
+@dataclass
+class Field:
+    name: str
+    type: str
+    repeated: bool = False
+    required: bool = False
+    default: object = None
+
+    @property
+    def wire_type(self) -> int:
+        if self.type in WIRE_TYPES:
+            return WIRE_TYPES[self.type]
+
+        field_type_object = get_field_type_object(self)
+        if safe_issubclass(field_type_object, MessageType):
+            return WIRE_TYPE_LENGTH
+
+        if safe_issubclass(field_type_object, IntEnum):
+            return WIRE_TYPE_INT
+
+        raise ValueError(f"Unrecognized type for field {self.name}")
+
+    def value_fits(self, value: int) -> bool:
+        if self.type == "uint32":
+            return 0 <= value < 2 ** 32
+        if self.type == "uint64":
+            return 0 <= value < 2 ** 64
+        if self.type == "sint32":
+            return -(2 ** 31) <= value < 2 ** 31
+        if self.type == "sint64":
+            return -(2 ** 63) <= value < 2 ** 63
+
+        raise ValueError(f"Cannot check range bounds for {self.type}")
 
 
-class BoolType:
-    WIRE_TYPE = 0
+class _MessageTypeMeta(type):
+    def __init__(cls, name: str, bases: tuple, d: dict) -> None:
+        super().__init__(name, bases, d)  # type: ignore [Expected 1 positional]
+        #if name != "MessageType":
+        #    cls.__init__ = MessageType.__init__  # type: ignore [Cannot assign member "__init__" for type "_MessageTypeMeta"]
 
 
-class BytesType:
-    WIRE_TYPE = 2
+class MessageType(metaclass=_MessageTypeMeta):
+    MESSAGE_WIRE_TYPE: Optional[int] = None
+    UNSTABLE: bool = False
 
-
-class UnicodeType:
-    WIRE_TYPE = 2
-
-
-class MessageType:
-    WIRE_TYPE = 2
+    FIELDS: Dict[int, Field] = {}
 
     @classmethod
-    def get_fields(cls):
-        return {}
+    def get_field(cls, name: str) -> Optional[Field]:
+        return next((f for f in cls.FIELDS.values() if f.name == name), None)
 
-    def __init__(self, **kwargs):
-        for kw in kwargs:
-            setattr(self, kw, kwargs[kw])
-        self._fill_missing()
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        if args:
+            warnings.warn(
+                "Positional arguments for MessageType are deprecated",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        # process fields one by one
+        MISSING = object()
+        for field, val in zip_longest(self.FIELDS.values(), args, fillvalue=MISSING):
+            if field is MISSING:
+                raise TypeError("too many positional arguments")
+            if field.name in kwargs and val is not MISSING:
+                # both *args and **kwargs specify the same thing
+                raise TypeError(f"got multiple values for argument '{field.name}'")
+            elif field.name in kwargs:
+                # set in kwargs but not in args
+                setattr(self, field.name, kwargs[field.name])
+            elif val is not MISSING:
+                # set in args but not in kwargs
+                setattr(self, field.name, val)
+            else:
+                default: Any
+                # not set at all, pick a default
+                if field.repeated:
+                    default = []
+                elif field.required:
+                    warnings.warn(
+                        f"Value of required field '{field.name}' must be provided in constructor",
+                        DeprecationWarning,
+                        stacklevel=2,
+                    )
+                    default = REQUIRED_FIELD_PLACEHOLDER
+                else:
+                    default = field.default
+                setattr(self, field.name, default)
 
-    def __eq__(self, rhs):
+    def __eq__(self, rhs: Any) -> bool:
         return self.__class__ is rhs.__class__ and self.__dict__ == rhs.__dict__
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         d = {}
         for key, value in self.__dict__.items():
             if value is None or value == []:
                 continue
             d[key] = value
-        return "<%s: %s>" % (self.__class__.__name__, d)
+        return f"<{self.__class__.__name__}: {d}>"
 
-    def __iter__(self):
-        return iter(self.keys())
-
-    def keys(self):
-        return (name for name, _, _ in self.get_fields().values())
-
-    def __getitem__(self, key):
-        return getattr(self, key)
-
-    def _fill_missing(self):
-        # fill missing fields
-        for fname, ftype, fflags in self.get_fields().values():
-            if not hasattr(self, fname):
-                if fflags & FLAG_REPEATED:
-                    setattr(self, fname, [])
-                else:
-                    setattr(self, fname, None)
-
-    def CopyFrom(self, obj):
-        self.__dict__ = obj.__dict__.copy()
-
-    def ByteSize(self):
+    def ByteSize(self) -> int:
         data = BytesIO()
         dump_message(data, self)
         return len(data.getvalue())
 
 
 class LimitedReader:
-    def __init__(self, reader, limit):
+    def __init__(self, reader: Reader, limit: int) -> None:
         self.reader = reader
         self.limit = limit
 
-    def readinto(self, buf):
+    def readinto(self, buf: bytearray) -> int:
         if self.limit < len(buf):
-            raise EOFError
+            return 0
         else:
             nread = self.reader.readinto(buf)
             self.limit -= nread
@@ -189,21 +265,102 @@ class LimitedReader:
 
 
 class CountingWriter:
-    def __init__(self):
+    def __init__(self) -> None:
         self.size = 0
 
-    def write(self, buf):
+    def write(self, buf: bytes) -> int:
         nwritten = len(buf)
         self.size += nwritten
         return nwritten
 
 
-FLAG_REPEATED = 1
+def get_field_type_object(
+    field: Field,
+) -> Optional[Union[Type[MessageType], Type[IntEnum]]]:
+    from . import messages
+
+    field_type_object = getattr(messages, field.type, None)
+    if not safe_issubclass(field_type_object, (IntEnum, MessageType)):
+        return None
+    return field_type_object
 
 
-def load_message(reader, msg_type):
-    fields = msg_type.get_fields()
-    msg = msg_type()
+def decode_packed_array_field(field: Field, reader: Reader) -> List[Any]:
+    assert field.repeated, "Not decoding packed array into non-repeated field"
+    length = load_uvarint(reader)
+    packed_reader = LimitedReader(reader, length)
+    values = []
+    try:
+        while True:
+            values.append(decode_varint_field(field, packed_reader))
+    except EOFError:
+        pass
+    return values
+
+
+def decode_varint_field(field: Field, reader: Reader) -> Union[int, bool, IntEnum]:
+    assert field.wire_type == WIRE_TYPE_INT, f"Field {field.name} is not varint-encoded"
+    value = load_uvarint(reader)
+
+    field_type_object = get_field_type_object(field)
+    if safe_issubclass(field_type_object, IntEnum):
+        try:
+            return field_type_object(value)
+        except ValueError as e:
+            # treat enum errors as warnings
+            LOG.info(f"On field {field.name}: {e}")
+            return value
+
+    if field.type.startswith("uint"):
+        if not field.value_fits(value):
+            LOG.info(
+                f"On field {field.name}: value {value} out of range for {field.type}"
+            )
+        return value
+
+    if field.type.startswith("sint"):
+        value = uint_to_sint(value)
+        if not field.value_fits(value):
+            LOG.info(
+                f"On field {field.name}: value {value} out of range for {field.type}"
+            )
+        return value
+
+    if field.type == "bool":
+        return bool(value)
+
+    raise TypeError  # not a varint field or unknown type
+
+
+def decode_length_delimited_field(
+    field: Field, reader: Reader
+) -> Union[bytes, str, MessageType]:
+    value = load_uvarint(reader)
+    if field.type == "bytes":
+        buf = bytearray(value)
+        reader.readinto(buf)
+        return bytes(buf)
+
+    if field.type == "string":
+        buf = bytearray(value)
+        reader.readinto(buf)
+        return buf.decode()
+
+    field_type_object = get_field_type_object(field)
+    if safe_issubclass(field_type_object, MessageType):
+        return load_message(LimitedReader(reader, value), field_type_object)
+
+    raise TypeError  # field type is unknown
+
+
+def load_message(reader: Reader, msg_type: Type[MT]) -> MT:
+    msg_dict: Dict[str, Any] = {}
+    # pre-seed the dict
+    for field in msg_type.FIELDS.values():
+        if field.repeated:
+            msg_dict[field.name] = []
+        elif not field.required:
+            msg_dict[field.name] = field.default
 
     while True:
         try:
@@ -214,138 +371,163 @@ def load_message(reader, msg_type):
         ftag = fkey >> 3
         wtype = fkey & 7
 
-        field = fields.get(ftag, None)
-
-        if field is None:  # unknown field, skip it
-            if wtype == 0:
+        if ftag not in msg_type.FIELDS:  # unknown field, skip it
+            if wtype == WIRE_TYPE_INT:
                 load_uvarint(reader)
-            elif wtype == 2:
+            elif wtype == WIRE_TYPE_LENGTH:
                 ivalue = load_uvarint(reader)
                 reader.readinto(bytearray(ivalue))
             else:
                 raise ValueError
             continue
 
-        fname, ftype, fflags = field
-        if wtype != ftype.WIRE_TYPE:
-            raise TypeError  # parsed wire type differs from the schema
+        field = msg_type.FIELDS[ftag]
 
-        ivalue = load_uvarint(reader)
+        if (
+            wtype == WIRE_TYPE_LENGTH
+            and field.wire_type == WIRE_TYPE_INT
+            and field.repeated
+        ):
+            # packed array
+            fvalues = decode_packed_array_field(field, reader)
 
-        if ftype is UVarintType:
-            fvalue = ivalue
-        elif ftype is SVarintType:
-            fvalue = uint_to_sint(ivalue)
-        elif ftype is BoolType:
-            fvalue = bool(ivalue)
-        elif ftype is BytesType:
-            buf = bytearray(ivalue)
-            reader.readinto(buf)
-            fvalue = bytes(buf)
-        elif ftype is UnicodeType:
-            buf = bytearray(ivalue)
-            reader.readinto(buf)
-            fvalue = buf.decode()
-        elif issubclass(ftype, MessageType):
-            fvalue = load_message(LimitedReader(reader, ivalue), ftype)
+        elif wtype != field.wire_type:
+            raise ValueError(f"Field {field.name} received value does not match schema")
+
+        elif wtype == WIRE_TYPE_LENGTH:
+            fvalues = [decode_length_delimited_field(field, reader)]
+
+        elif wtype == WIRE_TYPE_INT:
+            fvalues = [decode_varint_field(field, reader)]
+
         else:
-            raise TypeError  # field type is unknown
+            raise TypeError  # unknown wire type
 
-        if fflags & FLAG_REPEATED:
-            pvalue = getattr(msg, fname)
-            pvalue.append(fvalue)
-            fvalue = pvalue
-        setattr(msg, fname, fvalue)
+        if field.repeated:
+            msg_dict[field.name].extend(fvalues)
+        elif len(fvalues) != 1:
+            raise ValueError("Unexpected multiple values in non-repeating field")
+        else:
+            msg_dict[field.name] = fvalues[0]
 
-    return msg
+    for field in msg_type.FIELDS.values():
+        if field.required and field.name not in msg_dict:
+            raise ValueError(f"Did not receive value for field {field.name}")
+    return msg_type(**msg_dict)
 
 
-def dump_message(writer, msg):
+def dump_message(writer: Writer, msg: "MessageType") -> None:
     repvalue = [0]
     mtype = msg.__class__
-    fields = mtype.get_fields()
 
-    for ftag in fields:
-        fname, ftype, fflags = fields[ftag]
+    for ftag, field in mtype.FIELDS.items():
+        fvalue = getattr(msg, field.name, None)
 
-        fvalue = getattr(msg, fname, None)
+        if fvalue is REQUIRED_FIELD_PLACEHOLDER:
+            raise ValueError(f"Required value of field {field.name} was not provided")
+
         if fvalue is None:
+            # not sending empty values
             continue
 
-        fkey = (ftag << 3) | ftype.WIRE_TYPE
+        fkey = (ftag << 3) | field.wire_type
 
-        if not fflags & FLAG_REPEATED:
+        if not field.repeated:
             repvalue[0] = fvalue
             fvalue = repvalue
 
         for svalue in fvalue:
             dump_uvarint(writer, fkey)
 
-            if ftype is UVarintType:
-                dump_uvarint(writer, svalue)
-
-            elif ftype is SVarintType:
-                dump_uvarint(writer, sint_to_uint(svalue))
-
-            elif ftype is BoolType:
-                dump_uvarint(writer, int(svalue))
-
-            elif ftype is BytesType:
-                dump_uvarint(writer, len(svalue))
-                writer.write(svalue)
-
-            elif ftype is UnicodeType:
-                if not isinstance(svalue, bytes):
-                    svalue = svalue.encode()
-
-                dump_uvarint(writer, len(svalue))
-                writer.write(svalue)
-
-            elif issubclass(ftype, MessageType):
+            field_type_object = get_field_type_object(field)
+            if safe_issubclass(field_type_object, MessageType):
+                if not isinstance(svalue, field_type_object):
+                    raise ValueError(
+                        f"Value {svalue} in field {field.name} is not {field_type_object.__name__}"
+                    )
                 counter = CountingWriter()
                 dump_message(counter, svalue)
                 dump_uvarint(writer, counter.size)
                 dump_message(writer, svalue)
+
+            elif safe_issubclass(field_type_object, IntEnum):
+                if svalue not in field_type_object.__members__.values():
+                    raise ValueError(
+                        f"Value {svalue} in field {field.name} unknown for {field.type}"
+                    )
+                dump_uvarint(writer, svalue)
+
+            elif field.type.startswith("uint"):
+                if not field.value_fits(svalue):
+                    raise ValueError(
+                        f"Value {svalue} in field {field.name} does not fit into {field.type}"
+                    )
+                dump_uvarint(writer, svalue)
+
+            elif field.type.startswith("sint"):
+                if not field.value_fits(svalue):
+                    raise ValueError(
+                        f"Value {svalue} in field {field.name} does not fit into {field.type}"
+                    )
+                dump_uvarint(writer, sint_to_uint(svalue))
+
+            elif field.type == "bool":
+                dump_uvarint(writer, int(svalue))
+
+            elif field.type == "bytes":
+                assert isinstance(svalue, (bytes, bytearray))
+                dump_uvarint(writer, len(svalue))
+                writer.write(svalue)
+
+            elif field.type == "string":
+                assert isinstance(svalue, str)
+                svalue_bytes = svalue.encode()
+                dump_uvarint(writer, len(svalue_bytes))
+                writer.write(svalue_bytes)
 
             else:
                 raise TypeError
 
 
 def format_message(
-    pb: MessageType,
+    pb: "MessageType",
     indent: int = 0,
     sep: str = " " * 4,
     truncate_after: Optional[int] = 256,
     truncate_to: Optional[int] = 64,
 ) -> str:
-    def mostly_printable(bytes):
+    def mostly_printable(bytes: bytes) -> bool:
         if not bytes:
             return True
         printable = sum(1 for byte in bytes if 0x20 <= byte <= 0x7E)
         return printable / len(bytes) > 0.8
 
-    def pformat_value(value: Any, indent: int) -> str:
+    def pformat(name: str, value: Any, indent: int) -> str:
         level = sep * indent
         leadin = sep * (indent + 1)
+
         if isinstance(value, MessageType):
             return format_message(value, indent, sep)
+
         if isinstance(value, list):
             # short list of simple values
-            if not value or not isinstance(value[0], MessageType):
+            if not value or all(isinstance(x, int) for x in value):
                 return repr(value)
 
             # long list, one line per entry
             lines = ["[", level + "]"]
-            lines[1:1] = [leadin + pformat_value(x, indent + 1) + "," for x in value]
+            lines[1:1] = [leadin + pformat(name, x, indent + 1) + "," for x in value]
             return "\n".join(lines)
+
         if isinstance(value, dict):
             lines = ["{"]
             for key, val in sorted(value.items()):
                 if val is None or val == []:
                     continue
-                lines.append(leadin + key + ": " + pformat_value(val, indent + 1) + ",")
+                lines.append(leadin + key + ": " + pformat(key, val, indent + 1) + ",")
             lines.append(level + "}")
             return "\n".join(lines)
+
         if isinstance(value, (bytes, bytearray)):
             length = len(value)
             suffix = ""
@@ -356,70 +538,98 @@ def format_message(
                 output = repr(value)
             else:
                 output = "0x" + value.hex()
-            return "{} bytes {}{}".format(length, output, suffix)
+            return f"{length} bytes {output}{suffix}"
+
+        field = pb.get_field(name)
+        if field is not None:
+            if isinstance(value, int) and safe_issubclass(field.type, IntEnum):
+                try:
+                    return f"{field.type(value).name} ({value})"
+                except ValueError:
+                    return str(value)
 
         return repr(value)
 
     return "{name} ({size} bytes) {content}".format(
         name=pb.__class__.__name__,
         size=pb.ByteSize(),
-        content=pformat_value(pb.__dict__, indent),
+        content=pformat("", pb.__dict__, indent),
     )
 
 
-def value_to_proto(ftype, value):
-    if issubclass(ftype, MessageType):
+def value_to_proto(field: Field, value: Any) -> Any:
+    field_type_object = get_field_type_object(field)
+    if safe_issubclass(field_type_object, MessageType):
         raise TypeError("value_to_proto only converts simple values")
 
-    if ftype in (UVarintType, SVarintType):
+    if safe_issubclass(field_type_object, IntEnum):
+        if isinstance(value, str):
+            return field_type_object.__members__[value]
+        else:
+            try:
+                return field_type_object(value)
+            except ValueError as e:
+                LOG.info(f"On field {field.name}: {e}")
+                return int(value)
+
+    if "int" in field.type:
         return int(value)
 
-    if ftype is BoolType:
+    if field.type == "bool":
         return bool(value)
 
-    if ftype is UnicodeType:
+    if field.type == "string":
         return str(value)
 
-    if ftype is BytesType:
+    if field.type == "bytes":
         if isinstance(value, str):
             return bytes.fromhex(value)
         elif isinstance(value, bytes):
             return value
         else:
-            raise TypeError("can't convert {} value to bytes".format(type(value)))
+            raise TypeError(f"can't convert {type(value)} value to bytes")
 
 
-def dict_to_proto(message_type, d):
+def dict_to_proto(message_type: Type[MT], d: Dict[str, Any]) -> MT:
     params = {}
-    for fname, ftype, fflags in message_type.get_fields().values():
-        repeated = fflags & FLAG_REPEATED
-        value = d.get(fname)
+    for field in message_type.FIELDS.values():
+        value = d.get(field.name)
         if value is None:
             continue
 
-        if not repeated:
+        if not field.repeated:
             value = [value]
 
-        if issubclass(ftype, MessageType):
-            function = dict_to_proto
+        field_type_object = get_field_type_object(field)
+        if safe_issubclass(field_type_object, MessageType):
+            newvalue = [dict_to_proto(field_type_object, v) for v in value]
         else:
-            function = value_to_proto
+            newvalue = [value_to_proto(field, v) for v in value]
 
-        newvalue = [function(ftype, v) for v in value]
-
-        if not repeated:
+        if not field.repeated:
             newvalue = newvalue[0]
 
-        params[fname] = newvalue
+        params[field.name] = newvalue
     return message_type(**params)
 
 
-def to_dict(msg):
+def to_dict(msg: "MessageType", hexlify_bytes: bool = True) -> Dict[str, Any]:
+    def convert_value(value: Any) -> Any:
+        if hexlify_bytes and isinstance(value, bytes):
+            return value.hex()
+        elif isinstance(value, MessageType):
+            return to_dict(value, hexlify_bytes)
+        elif isinstance(value, list):
+            return [convert_value(v) for v in value]
+        elif isinstance(value, IntEnum):
+            return value.name
+        else:
+            return value
+
     res = {}
     for key, value in msg.__dict__.items():
         if value is None or value == []:
             continue
-        if isinstance(value, MessageType):
-            value = to_dict(value)
-        res[key] = value
+        res[key] = convert_value(value)
+
     return res
