@@ -29,7 +29,7 @@ Then in another terminal run commands similar to these, adapted to your environm
   hwi.py enumerate # this shows you the fingerprint of your hardware wallet
   FINGERPRINT_TESTNET="yourHardwareWalletFingerprint" # shown by "hwi enumerate"
   # in this example we use SEGWIT BECH32 ADDRESSES
-  DERIVATIONPATH_TESTNET=1 # testnet uses derivation paths like m/84h/57h/0h/0/* and m/84h/57h/0h/1/*
+  DERIVATIONPATH_TESTNET=1 # testnet uses derivation paths like m/84h/1h/0h/0/* and m/84h/57h/0h/1/*
   DERIVATIONPATH_MAINNET=0 # mainnet uses derivation paths like m/84h/57h/0h/0/* and m/84h/57h/0h/1/*
   # if the mainnet path is used on testnet, it will work too, but Trezor device gives warnings 
   # of unknown address on Trezor display. This is not recommended. Use the correct derivation path
