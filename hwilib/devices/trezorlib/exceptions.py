@@ -1,6 +1,6 @@
 # This file is part of the Trezor project.
 #
-# Copyright (C) 2012-2018 SatoshiLabs and contributors
+# Copyright (C) 2012-2022 SatoshiLabs and contributors
 #
 # This library is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License version 3
@@ -14,18 +14,24 @@
 # You should have received a copy of the License along with this library.
 # If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .messages import Failure
+
 
 class TrezorException(Exception):
     pass
 
 
 class TrezorFailure(TrezorException):
-    def __init__(self, failure):
+    def __init__(self, failure: "Failure") -> None:
         self.failure = failure
-        # TODO: this is backwards compatibility with tests. it should be changed
-        super().__init__(self.failure.code, self.failure.message)
+        self.code = failure.code
+        self.message = failure.message
+        super().__init__(self.code, self.message, self.failure)
 
-    def __str__(self):
+    def __str__(self) -> str:
         from .messages import FailureType
 
         types = {
@@ -33,8 +39,8 @@ class TrezorFailure(TrezorException):
             for name in dir(FailureType)
             if not name.startswith("_")
         }
-        if self.failure.message is not None:
-            return "{}: {}".format(types[self.failure.code], self.failure.message)
+        if self.message is not None:
+            return f"{types[self.code]}: {self.message}"
         else:
             return types[self.failure.code]
 

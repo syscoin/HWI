@@ -1,3 +1,7 @@
+"""
+Base 58 conversion utilities
+****************************
+"""
 
 #
 # base58.py
@@ -8,14 +12,23 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #
 
-from .serializations import hash256
-import struct
 from binascii import hexlify, unhexlify
 from typing import List
+
+from .common import hash256
+from .errors import BadArgumentError
+
+
 b58_digits: str = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
 
+
 def encode(b: bytes) -> str:
-    """Encode bytes to a base58-encoded string"""
+    """
+    Encode bytes to a base58-encoded string
+
+    :param b: Bytes to encode
+    :return: Base58 encoded string of ``b``
+    """
 
     # Convert big-endian bytes to integer
     n: int = int('0x0' + hexlify(b).decode('utf8'), 16)
@@ -38,7 +51,12 @@ def encode(b: bytes) -> str:
     return b58_digits[0] * pad + res
 
 def decode(s: str) -> bytes:
-    """Decode a base58-encoding string, returning bytes"""
+    """
+    Decode a base58-encoding string, returning bytes
+
+    :param s: Base48 string to decode
+    :return: Bytes encoded by ``s``
+    """
     if not s:
         return b''
 
@@ -47,7 +65,7 @@ def decode(s: str) -> bytes:
     for c in s:
         n *= 58
         if c not in b58_digits:
-            raise ValueError('Character %r is not a valid base58 character' % c)
+            raise BadArgumentError('Character %r is not a valid base58 character' % c)
         digit = b58_digits.index(c)
         n += digit
 
@@ -66,33 +84,73 @@ def decode(s: str) -> bytes:
             break
     return b'\x00' * pad + res
 
-def get_xpub_fingerprint(s: str) -> str:
+def get_xpub_fingerprint(s: str) -> bytes:
+    """
+    Get the parent fingerprint from an extended public key
+
+    :param s: The extended pubkey
+    :return: The parent fingerprint bytes
+    """
     data = decode(s)
     fingerprint = data[5:9]
-    return struct.unpack("<I", fingerprint)[0]
+    return fingerprint
 
 def get_xpub_fingerprint_hex(xpub: str) -> str:
-    data = decode(xpub)
-    fingerprint = data[5:9]
-    return hexlify(fingerprint).decode()
+    """
+    Get the parent fingerprint as a hex string from an extended public key
 
-def get_xpub_fingerprint_as_id(xpub: str) -> str:
+    :param s: The extended pubkey
+    :return: The parent fingerprint as a hex string
+    """
     data = decode(xpub)
     fingerprint = data[5:9]
     return hexlify(fingerprint).decode()
 
 def to_address(b: bytes, version: bytes) -> str:
+    """
+    Base58 Check Encode the data with the version number.
+    Used to encode legacy style addresses.
+
+    :param b: The data to encode
+    :param version: The version number to encode with
+    :return: The Base58 Check Encoded string
+    """
     data = version + b
     checksum = hash256(data)[0:4]
     data += checksum
     return encode(data)
 
 def xpub_to_pub_hex(xpub: str) -> str:
+    """
+    Get the public key as a string from the extended public key.
+
+    :param xpub: The extended pubkey
+    :return: The pubkey hex string
+    """
     data = decode(xpub)
     pubkey = data[-37:-4]
     return hexlify(pubkey).decode()
 
+
+def xpub_to_xonly_pub_hex(xpub: str) -> str:
+    """
+    Get the public key as a string from the extended public key.
+
+    :param xpub: The extended pubkey
+    :return: The pubkey hex string
+    """
+    data = decode(xpub)
+    pubkey = data[-36:-4]
+    return hexlify(pubkey).decode()
+
+
 def xpub_main_2_test(xpub: str) -> str:
+    """
+    Convert an extended pubkey from mainnet version to testnet version.
+
+    :param xpub: The extended pubkey
+    :return: The extended pubkey re-encoded using testnet version bytes
+    """
     data = decode(xpub)
     test_data = b'\x04\x35\x87\xCF' + data[4:-4]
     checksum = hash256(test_data)[0:4]

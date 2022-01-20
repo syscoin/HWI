@@ -26,8 +26,10 @@ from binascii import hexlify, unhexlify
 
 class btchip:
 	BTCHIP_CLA = 0xe0
+	BTCHIP_CLA_COMMON_SDK = 0xb0
 	BTCHIP_JC_EXT_CLA = 0xf0
 
+	BTCHIP_INS_GET_APP_NAME_AND_VERSION = 0x01
 	BTCHIP_INS_SET_ALTERNATE_COIN_VERSION = 0x14
 	BTCHIP_INS_SETUP = 0x20
 	BTCHIP_INS_VERIFY_PIN = 0x22
@@ -84,8 +86,8 @@ class btchip:
 				self.scriptBlockLength = 50
 			else:
 				self.scriptBlockLength = 255
-		except:
-			pass			
+		except Exception:
+			pass				
 
 	def getWalletPublicKey(self, path, showOnScreen=False, segwit=False, segwitNative=False, cashAddr=False):
 		result = {}
@@ -172,7 +174,7 @@ class btchip:
 		result['value'] = response
 		return result
 
-	def startUntrustedTransaction(self, newTransaction, inputIndex, outputList, redeemScript, version=0x01, cashAddr=False):
+	def startUntrustedTransaction(self, newTransaction, inputIndex, outputList, redeemScript, version=0x01, cashAddr=False, continueSegwit=False):
 		# Start building a fake transaction with the passed inputs
 		segwit = False
 		if newTransaction:
@@ -186,7 +188,7 @@ class btchip:
 			else:
 				p2 = 0x00
 		else:
-				p2 = 0x80
+				p2 = 0x10 if continueSegwit else 0x80
 		apdu = [ self.BTCHIP_CLA, self.BTCHIP_INS_HASH_INPUT_START, 0x00, p2 ]
 		params = bytearray([version, 0x00, 0x00, 0x00])
 		writeVarint(len(outputList), params)
@@ -203,10 +205,10 @@ class btchip:
 			apdu = [ self.BTCHIP_CLA, self.BTCHIP_INS_HASH_INPUT_START, 0x80, 0x00 ]
 			params = []
 			script = bytearray(redeemScript)
-			if ('witness' in passedOutput) and passedOutput['witness']:
-				params.append(0x02)
-			elif ('trustedInput' in passedOutput) and passedOutput['trustedInput']:
+			if ('trustedInput' in passedOutput) and passedOutput['trustedInput']:
 				params.append(0x01)
+			elif ('witness' in passedOutput) and passedOutput['witness']:
+				params.append(0x02)
 			else:
 				params.append(0x00)
 			if ('trustedInput' in passedOutput) and passedOutput['trustedInput']:
@@ -215,8 +217,6 @@ class btchip:
 			if currentIndex != inputIndex:
 				script = bytearray()
 			writeVarint(len(script), params)
-			if len(script) == 0:
-				params.extend(sequence)
 			apdu.append(len(params))
 			apdu.extend(params)
 			self.dongle.exchange(bytearray(apdu))
@@ -234,6 +234,10 @@ class btchip:
 				apdu.extend(params)
 				self.dongle.exchange(bytearray(apdu))
 				offset += blockLength
+			if len(script) == 0:
+				apdu = [ self.BTCHIP_CLA, self.BTCHIP_INS_HASH_INPUT_START, 0x80, 0x00, len(sequence) ]
+				apdu.extend(sequence)
+				self.dongle.exchange(bytearray(apdu))				
 			currentIndex += 1
 
 	def finalizeInput(self, outputAddress, amount, fees, changePath, rawTx=None):
@@ -269,7 +273,7 @@ class btchip:
 					response = self.dongle.exchange(bytearray(apdu))
 					offset += dataLength
 				alternateEncoding = True
-			except:
+			except Exception:
 				pass
 		if not alternateEncoding:
 			apdu = [ self.BTCHIP_CLA, self.BTCHIP_INS_HASH_INPUT_FINALIZE, 0x02, 0x00 ]
@@ -320,6 +324,27 @@ class btchip:
 		apdu.extend(params)
 		result = self.dongle.exchange(bytearray(apdu))
 		result[0] = 0x30
+		return result
+
+	def signMessagePrepareV1(self, path, message):
+		donglePath = parse_bip32_path(path)
+		if self.needKeyCache:
+			self.resolvePublicKeysInPath(path)		
+		result = {}
+		apdu = [ self.BTCHIP_CLA, self.BTCHIP_INS_SIGN_MESSAGE, 0x00, 0x00 ]
+		params = []
+		params.extend(donglePath)
+		params.append(len(message))
+		params.extend(bytearray(message))
+		apdu.append(len(params))
+		apdu.extend(params)
+		response = self.dongle.exchange(bytearray(apdu))
+		result['confirmationNeeded'] = response[0] != 0x00
+		result['confirmationType'] = response[0]
+		if result['confirmationType'] == 0x02:
+			result['keycardData'] = response[1:]
+		if result['confirmationType'] == 0x03:
+			result['secureScreenData'] = response[1:]
 		return result
 
 	def signMessagePrepareV2(self, path, message):
@@ -384,6 +409,23 @@ class btchip:
 		response = self.dongle.exchange(bytearray(apdu))
 		return response
 
+	def getAppName(self):
+		apdu = [ self.BTCHIP_CLA_COMMON_SDK, self.BTCHIP_INS_GET_APP_NAME_AND_VERSION, 0x00, 0x00, 0x00 ]
+		try:
+			response = self.dongle.exchange(bytearray(apdu))
+			name_len = response[1]
+			name = response[2:][:name_len]
+			if b'OLOS' not in name:
+				return name.decode('ascii')
+		except BTChipException as e:
+			if e.sw == 0x6faa:
+				# ins not implemented"
+				return None
+			if e.sw == 0x6d00:
+				# Not in an app, return just a string saying that
+				return "not in an app"
+			raise
+
 	def getFirmwareVersion(self):
 		result = {}
 		apdu = [ self.BTCHIP_CLA, self.BTCHIP_INS_GET_FIRMWARE_VERSION, 0x00, 0x00, 0x00 ]
@@ -397,5 +439,8 @@ class btchip:
 				raise
 		result['compressedKeys'] = (response[0] == 0x01)
 		result['version'] = "%d.%d.%d" % (response[2], response[3], response[4])
+		result['major_version'] = response[2]
+		result['minor_version'] = response[3]
+		result['patch_version'] = response[4]
 		result['specialVersion'] = response[1]
 		return result

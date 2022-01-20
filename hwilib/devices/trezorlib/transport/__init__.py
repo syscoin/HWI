@@ -1,6 +1,6 @@
 # This file is part of the Trezor project.
 #
-# Copyright (C) 2012-2018 SatoshiLabs and contributors
+# Copyright (C) 2012-2019 SatoshiLabs and contributors
 #
 # This library is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License version 3
@@ -15,10 +15,9 @@
 # If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.
 
 import logging
-from typing import Iterable, List, Type
+from typing import Iterable, List, Tuple, Type
 
 from ..exceptions import TrezorException
-from ..protobuf import MessageType
 
 LOG = logging.getLogger(__name__)
 
@@ -26,15 +25,16 @@ LOG = logging.getLogger(__name__)
 DEV_TREZOR1 = (0x534C, 0x0001)
 DEV_TREZOR2 = (0x1209, 0x53C1)
 DEV_TREZOR2_BL = (0x1209, 0x53C0)
-DEV_KEEPKEY = (0x2B24, 0x0001)
-DEV_KEEPKEY_WEBUSB = (0x2B24, 0x0002)
 
-TREZORS = {DEV_TREZOR1, DEV_TREZOR2, DEV_TREZOR2_BL, DEV_KEEPKEY, DEV_KEEPKEY_WEBUSB}
+TREZORS = {DEV_TREZOR1, DEV_TREZOR2, DEV_TREZOR2_BL}
 
 UDEV_RULES_STR = """
 Do you have udev rules installed?
 https://github.com/trezor/trezor-common/blob/master/udev/51-trezor.rules
 """.strip()
+
+
+MessagePayload = Tuple[int, bytes]
 
 
 class TransportException(TrezorException):
@@ -44,7 +44,7 @@ class TransportException(TrezorException):
 class Transport:
     """Raw connection to a Trezor device.
 
-    Transport subclass represents a kind of communication link: WebUSB
+    Transport subclass represents a kind of communication link: Trezor Bridge, WebUSB
     or USB-HID connection, or UDP socket of listening emulator(s).
     It can also enumerate devices available over this communication link, and return
     them as instances.
@@ -58,7 +58,7 @@ class Transport:
     a Trezor device to a computer.
     """
 
-    PATH_PREFIX = None  # type: str
+    PATH_PREFIX: str = None
     ENABLED = False
 
     def __str__(self) -> str:
@@ -73,10 +73,10 @@ class Transport:
     def end_session(self) -> None:
         raise NotImplementedError
 
-    def read(self) -> MessageType:
+    def read(self) -> MessagePayload:
         raise NotImplementedError
 
-    def write(self, message: MessageType) -> None:
+    def write(self, message_type: int, message_data: bytes) -> None:
         raise NotImplementedError
 
     @classmethod
@@ -99,19 +99,20 @@ class Transport:
 
 
 def all_transports() -> Iterable[Type[Transport]]:
+    from .bridge import BridgeTransport
     from .hid import HidTransport
     from .udp import UdpTransport
     from .webusb import WebUsbTransport
 
     return set(
         cls
-        for cls in (HidTransport, UdpTransport, WebUsbTransport)
+        for cls in (BridgeTransport, HidTransport, UdpTransport, WebUsbTransport)
         if cls.ENABLED
     )
 
 
 def enumerate_devices() -> Iterable[Transport]:
-    devices = []  # type: List[Transport]
+    devices: List[Transport] = []
     for transport in all_transports():
         name = transport.__name__
         try:
@@ -131,7 +132,7 @@ def get_transport(path: str = None, prefix_search: bool = False) -> Transport:
         try:
             return next(iter(enumerate_devices()))
         except StopIteration:
-            raise TransportException("No TREZOR device found") from None
+            raise TransportException("No Trezor device found") from None
 
     # Find whether B is prefix of A (transport name is part of the path)
     # or A is prefix of B (path is a prefix, or a name, of transport).

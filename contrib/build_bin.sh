@@ -1,28 +1,25 @@
 #! /bin/bash
 # Script for building standalone binary releases deterministically
 
-eval "$(pyenv init -)"
+set -ex
+
+eval "$(pyenv init --path)"
 eval "$(pyenv virtualenv-init -)"
 pip install -U pip
 pip install poetry
 
 # Setup poetry and install the dependencies
-poetry install
-
-# We now need to remove debugging symbols and build id from the hidapi SO file
-so_dir=`dirname $(dirname $(poetry run which python))`/lib/python3.6/site-packages
-find ${so_dir} -name '*.so' -type f -execdir strip '{}' \;
-if [[ $OSTYPE != *"darwin"* ]]; then
-    find ${so_dir} -name '*.so' -type f -execdir strip -R .note.gnu.build-id '{}' \;
-fi
+poetry install -E qt
 
 # We also need to change the timestamps of all of the base library files
-lib_dir=`pyenv root`/versions/3.6.8/lib/python3.6
+lib_dir=`pyenv root`/versions/3.9.7/lib/python3.9
 TZ=UTC find ${lib_dir} -name '*.py' -type f -execdir touch -t "201901010000.00" '{}' \;
 
 # Make the standalone binary
 export PYTHONHASHSEED=42
 poetry run pyinstaller hwi.spec
+poetry run contrib/generate-ui.sh
+poetry run pyinstaller hwi-qt.spec
 unset PYTHONHASHSEED
 
 # Make the final compressed package
@@ -32,5 +29,13 @@ OS=`uname | tr '[:upper:]' '[:lower:]'`
 if [[ $OS == "darwin" ]]; then
     OS="mac"
 fi
-tar -czf "hwi-${VERSION}-${OS}-amd64.tar.gz" hwi
+target_tarfile="hwi-${VERSION}-${OS}-amd64.tar.gz"
+tar -czf $target_tarfile hwi hwi-qt
+
+# Copy the binaries to subdir for shasum
+target_dir="$target_tarfile.dir"
+mkdir $target_dir
+mv hwi $target_dir
+mv hwi-qt $target_dir
+
 popd

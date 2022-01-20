@@ -1,16 +1,17 @@
 #!/bin/bash
 # Script which sets up Wine and builds the Windows standalone binary
 
-set -e
+set -ex
 
-PYTHON_VERSION=3.6.8
+PYTHON_VERSION=3.9.7
 
 PYTHON_FOLDER="python3"
 PYHOME="c:/$PYTHON_FOLDER"
 PYTHON="wine $PYHOME/python.exe -OO -B"
 
-LIBUSB_URL=https://github.com/libusb/libusb/releases/download/v1.0.22/libusb-1.0.22.7z
-LIBUSB_HASH="671f1a420757b4480e7fadc8313d6fb3cbb75ca00934c417c1efa6e77fb8779b"
+LIBUSB_VERSION=1.0.23
+LIBUSB_URL=https://github.com/libusb/libusb/releases/download/v1.0.23/libusb-1.0.23.tar.bz2
+LIBUSB_HASH="db11c06e958a82dac52cf3c65cb4dd2c3f339c8a988665110e0d24d19312ad8d"
 
 WINDOWS_SDK_URL=http://go.microsoft.com/fwlink/p/?LinkID=2033686
 WINDOWS_SDK_HASH="016981259708e1afcab666c7c1ff44d1c4d63b5e778af8bc41b4f6db3d27961a"
@@ -20,7 +21,7 @@ wine 'wineboot'
 
 # Install Python
 # Get the PGP keys
-wget -N -c "https://www.python.org/static/files/pubkeys.txt"
+wget -O pubkeys.txt -N -c "https://keybase.io/stevedower/pgp_keys.asc?fingerprint=7ed10b6531d7c8e1bc296021fc624643487034e5"
 gpg --import pubkeys.txt
 rm pubkeys.txt
 
@@ -33,11 +34,15 @@ for msifile in core dev exe lib pip tools; do
     rm $msifile.msi*
 done
 
-# Get libusb
-wget -N -c -O libusb.7z "$LIBUSB_URL"
-echo "$LIBUSB_HASH  libusb.7z" | sha256sum -c
-7za x -olibusb libusb.7z -aoa
-cp libusb/MS64/dll/libusb-1.0.dll ~/.wine/drive_c/python3/
+# Get and build libusb
+wget -N -c -O libusb.tar.bz2 "$LIBUSB_URL"
+echo "$LIBUSB_HASH  libusb.tar.bz2" | sha256sum -c
+tar -xf libusb.tar.bz2
+pushd "libusb-$LIBUSB_VERSION"
+./configure --host=x86_64-w64-mingw32
+faketime -f "2019-01-01 00:00:00" make
+cp libusb/.libs/libusb-1.0.dll ~/.wine/drive_c/python3/
+popd
 rm -r libusb*
 
 # Get the Windows SDK
@@ -62,15 +67,34 @@ TZ=UTC find ${lib_dir} -name '*.py' -type f -execdir touch -t "201901010000.00" 
 # Install python dependencies
 POETRY="wine $PYHOME/Scripts/poetry.exe"
 sleep 5 # For some reason, pausing for a few seconds makes the next step work
-$POETRY install
+$POETRY install -E qt
+
+# make the ui files
+pushd hwilib/ui
+for file in *.ui
+do
+    gen_file=ui_`echo $file| cut -d. -f1`.py
+    $POETRY run pyside2-uic $file -o $gen_file
+    sed -i 's/raise()/raise_()/g' $gen_file
+done
+popd
 
 # Do the build
 export PYTHONHASHSEED=42
 $POETRY run pyinstaller hwi.spec
+$POETRY run pyinstaller hwi-qt.spec
 unset PYTHONHASHSEED
 
 # Make the final compressed package
 pushd dist
 VERSION=`$POETRY run hwi --version | cut -d " " -f 2 | dos2unix`
-zip "hwi-${VERSION}-windows-amd64.zip" hwi.exe
+target_zipfile="hwi-${VERSION}-windows-amd64.zip"
+zip $target_zipfile hwi.exe hwi-qt.exe
+
+# Copy the binaries to subdir for shasum
+target_dir="$target_zipfile.dir"
+mkdir $target_dir
+mv hwi.exe $target_dir
+mv hwi-qt.exe $target_dir
+
 popd
