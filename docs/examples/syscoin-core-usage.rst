@@ -1,7 +1,7 @@
 Using Syscoin Core with Hardware Wallets
 ****************************************
 
-This approach is fairly manual, requires the command line, and Syscoin Core >=4.1.0.
+This approach is fairly manual, requires the command line, and Syscoin Core >=4.3.0.
 
 Note: For this guide, code lines prefixed with ``$`` means that the command is typed in the terminal. Lines without ``$`` are output of the commands.
 
@@ -19,7 +19,7 @@ Syscoin Core
 This method of using hardware wallets uses Syscoin Core as the wallet for monitoring the blockchain. It allows a user to use their own full node instead of relying on an SPV wallet or vendor provided software.
 
 HWI works with Syscoin Core >=4.1.0.
-This guide will require Syscoin Core >=4.1.0 as it uses Descriptor Wallets.
+However this guide will require Syscoin Core >=4.3.0 as it uses Descriptor Wallets.
 
 Setup
 =====
@@ -142,7 +142,7 @@ Sending
 To send Syscoin, we will use ``walletcreatefundedpsbt``. This will create a Partially Signed Syscoin Transaction which is funded by inputs from the wallets (i.e. your watching only inputs selected with Syscoin Core's coin selection algorithm).
 This PSBT can be used with HWI to produce a signed PSBT which can then be finalized and broadcast.
 
-For example, suppose I am sending to 1 SYS to bc1q257z5t76hedc36wmmzva05890ny3kxd7xfwrgy. First I create a funded psbt with BIP 32 derivation paths to be included::
+For example, suppose I am sending to 1 BTC to bc1q257z5t76hedc36wmmzva05890ny3kxd7xfwrgy. First I create a funded psbt with BIP 32 derivation paths to be included::
 
     $ src/syscoin-cli -rpcwallet=hwicoldcard walletcreatefundedpsbt '[]' '[{"bc1q257z5t76hedc36wmmzva05890ny3kxd7xfwrgy":1}]' 0 '{"includeWatching":true}' true
     {
