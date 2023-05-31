@@ -567,7 +567,7 @@ def enumerate(password: Optional[str] = None, expert: bool = False, chain: Chain
             client = None
             with handle_errors(common_err_msgs["enumerate"], d_data):
                 try:
-                    client = LedgerClient(path, password)
+                    client = LedgerClient(path, password, expert, chain)
                     d_data['fingerprint'] = client.get_master_fingerprint().hex()
                     d_data['needs_pin_sent'] = False
                     d_data['needs_passphrase_sent'] = False

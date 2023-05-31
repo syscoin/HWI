@@ -18,6 +18,9 @@ from ..hwwclient import HardwareWalletClient
 from ..errors import ActionCanceledError, BadArgumentError, DeviceFailureError, DeviceAlreadyInitError, DEVICE_NOT_INITIALIZED, DeviceNotReadyError, NoPasswordError, UnavailableActionError, common_err_msgs, handle_errors
 from ..serializations import CTransaction, hash256, ser_sig_der, ser_sig_compact, ser_compact_size
 from ..base58 import get_xpub_fingerprint, xpub_main_2_test, get_xpub_fingerprint_hex
+from ..common import (
+    Chain,
+)
 
 applen = 225280 # flash size minus bootloader length
 chunksize = 8 * 512
@@ -572,7 +575,7 @@ class DigitalbitboxClient(HardwareWalletClient):
     def send_pin(self, pin):
         raise UnavailableActionError('The Digital Bitbox does not need a PIN sent from the host')
 
-def enumerate(password=''):
+def enumerate(password='', expert: bool = False, chain: Chain = Chain.MAIN):
     results = []
     devices = hid.enumerate(DBB_VENDOR_ID, DBB_DEVICE_ID)
     # Try connecting to simulator

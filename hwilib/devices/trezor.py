@@ -18,7 +18,9 @@ from types import MethodType
 import base64
 import logging
 import sys
-
+from ..common import (
+    Chain,
+)
 py_enumerate = enumerate # Need to use the enumerate built-in but there's another function already named that
 
 # Only handles up to 15 of 15
@@ -421,7 +423,7 @@ class TrezorClient(HardwareWalletClient):
             return {'success': False}
         return {'success': True}
 
-def enumerate(password=''):
+def enumerate(password='', expert: bool = False, chain: Chain = Chain.MAIN):
     results = []
     for dev in enumerate_devices():
         d_data = {}

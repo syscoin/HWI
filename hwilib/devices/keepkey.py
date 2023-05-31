@@ -4,6 +4,9 @@ from ..errors import DEVICE_NOT_INITIALIZED, DeviceNotReadyError, common_err_msg
 from .trezorlib.transport import enumerate_devices
 from .trezor import TrezorClient
 from ..base58 import get_xpub_fingerprint_hex
+from ..common import (
+    Chain,
+)
 
 py_enumerate = enumerate # Need to use the enumerate built-in but there's another function already named that
 
@@ -12,7 +15,7 @@ class KeepkeyClient(TrezorClient):
         super(KeepkeyClient, self).__init__(path, password)
         self.type = 'Keepkey'
 
-def enumerate(password=''):
+def enumerate(password='', expert: bool = False, chain: Chain = Chain.MAIN):
     results = []
     for dev in enumerate_devices():
         d_data = {}
