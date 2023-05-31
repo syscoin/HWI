@@ -163,7 +163,7 @@ class LedgerClient(HardwareWalletClient):
     def get_master_fingerprint(self) -> bytes:
         return self.client.get_master_fingerprint()
     
-    def get_pubkey_at_path_non_serialized(self, path: str, expert: bool = False) -> Dict[str, Any]:
+    def get_pubkey_at_path_non_serialized(self, path: str, expert: bool = False) -> ExtendedKey:
         path = path.replace("h", "'")
         path = path.replace("H", "'")
         try:
