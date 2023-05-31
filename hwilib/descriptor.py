@@ -149,14 +149,14 @@ class PubkeyProvider(object):
 
         return cls(origin, pubkey, deriv_path)
 
-    def to_string(self) -> str:
+    def to_string(self, hardened_char: str = "h") -> str:
         """
         Serialize the pubkey expression to a string to be used in a descriptor
         :return: The pubkey expression as a string
         """
         s = ""
         if self.origin:
-            s += "[{}]".format(self.origin.to_string())
+            s += "[{}]".format(self.origin.to_string(hardened_char))
         s += self.pubkey
         if self.deriv_path:
             s += self.deriv_path

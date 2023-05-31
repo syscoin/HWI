@@ -153,7 +153,7 @@ class LedgerClient(HardwareWalletClient):
                 port = int(split_path[2])
                 self.transport_client = TransportClient(interface="tcp", server=server, port=port, debug=is_debug)
             else:
-                self.transport_client = TransportClient(interface="hid", debug=is_debug, hid_path=path.encode())
+                self.transport_client = TransportClient(interface="hid", debug=is_debug, path=path.encode())
 
             self.client = createClient(self.transport_client, chain=self.chain, debug=is_debug)
         except NotSupportedError as e:
@@ -162,9 +162,8 @@ class LedgerClient(HardwareWalletClient):
     @ledger_exception
     def get_master_fingerprint(self) -> bytes:
         return self.client.get_master_fingerprint()
-
-    @ledger_exception
-    def get_pubkey_at_path(self, path: str) -> ExtendedKey:
+    
+    def get_pubkey_at_path_non_serialized(self, path: str, expert: bool = False) -> Dict[str, Any]:
         path = path.replace("h", "'")
         path = path.replace("H", "'")
         try:
@@ -174,6 +173,15 @@ class LedgerClient(HardwareWalletClient):
             # If so, try again but with display=True
             xpub_str = self.client.get_extended_pubkey(path=path, display=True)
         return ExtendedKey.deserialize(xpub_str)
+
+    @ledger_exception
+    def get_pubkey_at_path(self, path: str, expert: bool = False) -> Dict[str, Any]:
+        xpub = self.get_pubkey_at_path_non_serialized(path, expert)
+        result: Dict[str, Any] = {"xpub": xpub.to_string()}
+        if expert:
+            result.update(xpub.get_printable_dict())
+        return result
+        
 
     @ledger_exception
     def sign_tx(self, tx: PSBT) -> PSBT:
@@ -391,14 +399,18 @@ class LedgerClient(HardwareWalletClient):
             BadArgumentError("Unknown address type")
 
         path = [H_(get_bip44_purpose(addr_type)), H_(get_bip44_chain(self.chain)), H_(account)]
-
         # Build a PubkeyProvider for the key we're going to use
         origin = KeyOriginInfo(self.get_master_fingerprint(), path)
-        pk_prov = PubkeyProvider(origin, self.get_pubkey_at_path(f"m{origin._path_string()}").to_string(), None)
+        pk_prov = PubkeyProvider(origin, self.get_pubkey_at_path_non_serialized(f"m{origin._path_string()}").to_string(), None)
         key_str = pk_prov.to_string(hardened_char="'")
 
         # Make the Wallet object
         return WalletPolicy(name="", descriptor_template=template, keys_info=[key_str])
+
+    def display_address(self, keypath: str, sh_wpkh=False, wpkh=False) -> str:
+        if sh_wpkh:
+            return self.display_singlesig_address(keypath, AddressType.SH_WIT)
+        return self.display_singlesig_address(keypath, AddressType.WIT if wpkh else AddressType.LEGACY)
 
     @ledger_exception
     def display_singlesig_address(
