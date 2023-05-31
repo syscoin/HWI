@@ -1,3 +1,4 @@
+
 """
 Original version: https://github.com/bitcoin-core/HWI/blob/3fe369d0379212fae1c72729a179d133b0adc872/hwilib/descriptor.py
 Distributed under the MIT License.

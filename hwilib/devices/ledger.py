@@ -1,29 +1,89 @@
-# Ledger interaction script
+"""
+Ledger Devices
+**************
+"""
 
+from functools import wraps
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
+
+from ..descriptor import (
+    MultisigDescriptor,
+    PubkeyProvider,
+)
 from ..hwwclient import HardwareWalletClient
-from ..errors import ActionCanceledError, BadArgumentError, DeviceConnectionError, DeviceFailureError, UnavailableActionError, common_err_msgs, handle_errors
-from .btchip.syscoinTransaction import syscoinTransaction
-from .btchip.btchip import btchip
-from .btchip.btchipComm import HIDDongleHIDAPI
-from .btchip.btchipException import BTChipException
-from .btchip.btchipUtils import compress_public_key
-import base64
+from ..errors import (
+    ActionCanceledError,
+    BadArgumentError,
+    DeviceConnectionError,
+    DeviceFailureError,
+    UnavailableActionError,
+    UnknownDeviceError,
+    common_err_msgs,
+    handle_errors,
+)
+from ..common import (
+    AddressType,
+    Chain,
+)
+from .ledger_bitcoin.client import (
+    createClient,
+    NewClient,
+    LegacyClient,
+    TransportClient,
+)
+from .ledger_bitcoin.exception import NotSupportedError
+from .ledger_bitcoin.wallet import (
+    MultisigWallet,
+    WalletPolicy,
+)
+from .ledger_bitcoin.btchip.btchipException import BTChipException
+
+import builtins
+import copy
 import hid
-import struct
-from .. import base58
-from ..base58 import get_xpub_fingerprint_hex
-from ..serializations import hash256, hash160, CTransaction
+
+from ..key import (
+    ExtendedKey,
+    get_bip44_purpose,
+    get_bip44_chain,
+    H_,
+    is_standard_path,
+    KeyOriginInfo,
+    parse_path,
+)
+from .._script import (
+    is_p2sh,
+    is_p2wsh,
+    is_witness,
+    parse_multisig,
+)
+from ..psbt import PSBT
 import logging
 import re
 
+SIMULATOR_PATH = 'tcp:127.0.0.1:40000'
+
 LEDGER_VENDOR_ID = 0x2c97
-LEDGER_DEVICE_IDS = [
-    0x0001, # Ledger Nano S
-    0x0004, # Ledger Nano X
-]
+LEDGER_MODEL_IDS = {
+    0x10: "ledger_nano_s",
+    0x40: "ledger_nano_x",
+    0x50: "ledger_nano_s_plus"
+}
+LEDGER_LEGACY_PRODUCT_IDS = {
+    0x0001: "ledger_nano_s",
+    0x0004: "ledger_nano_x"
+}
 
 # minimal checking of string keypath
-def check_keypath(key_path):
+def check_keypath(key_path: str) -> bool:
     parts = re.split("/", key_path)
     if parts[0] != "m":
         return False
@@ -48,8 +108,19 @@ cancels = [
     0x6985, # BTCHIP_SW_CONDITIONS_OF_USE_NOT_SATISFIED
 ]
 
-def ledger_exception(f):
-    def func(*args, **kwargs):
+# The priority of address types we want for signing.
+# We want to do Taproot first, then segwit, then legacy
+# Higher number is lower priority so that sort does not require reversing.
+signing_priority = {
+    AddressType.TAP: 0,
+    AddressType.WIT: 1,
+    AddressType.SH_WIT: 2,
+    AddressType.LEGACY: 3,
+}
+
+def ledger_exception(f: Callable[..., Any]) -> Any:
+    @wraps(f)
+    def func(*args: Any, **kwargs: Any) -> Any:
         try:
             return f(*args, **kwargs)
         except ValueError as e:
@@ -70,296 +141,449 @@ def ledger_exception(f):
 # This class extends the HardwareWalletClient for Ledger Nano S and Nano X specific things
 class LedgerClient(HardwareWalletClient):
 
-    def __init__(self, path, password=''):
-        super(LedgerClient, self).__init__(path, password)
-        device = hid.device()
-        device.open_path(path.encode())
-        device.set_nonblocking(True)
+    def __init__(self, path: str, password: Optional[str] = None, expert: bool = False, chain: Chain = Chain.MAIN) -> None:
+        super(LedgerClient, self).__init__(path, password, expert, chain)
 
-        self.dongle = HIDDongleHIDAPI(device, True, logging.getLogger().getEffectiveLevel() == logging.DEBUG)
-        self.app = btchip(self.dongle)
+        is_debug = logging.getLogger().getEffectiveLevel() == logging.DEBUG
 
-    # Must return a dict with the xpub
-    # Retrieves the public key at the specified BIP 32 derivation path
+        try:
+            if path.startswith('tcp'):
+                split_path = path.split(':')
+                server = split_path[1]
+                port = int(split_path[2])
+                self.transport_client = TransportClient(interface="tcp", server=server, port=port, debug=is_debug)
+            else:
+                self.transport_client = TransportClient(interface="hid", debug=is_debug, hid_path=path.encode())
+
+            self.client = createClient(self.transport_client, chain=self.chain, debug=is_debug)
+        except NotSupportedError as e:
+            raise DeviceConnectionError(e.args[2])
+
     @ledger_exception
-    def get_pubkey_at_path(self, path):
-        if not check_keypath(path):
-            raise BadArgumentError("Invalid keypath")
-        path = path[2:]
-        path = path.replace('h', '\'')
-        path = path.replace('H', '\'')
-        # This call returns raw uncompressed pubkey, chaincode
-        pubkey = self.app.getWalletPublicKey(path)
-        if path != "":
-            parent_path = ""
-            for ind in path.split("/")[:-1]:
-                parent_path += ind + "/"
-            parent_path = parent_path[:-1]
+    def get_master_fingerprint(self) -> bytes:
+        return self.client.get_master_fingerprint()
 
-            # Get parent key fingerprint
-            parent = self.app.getWalletPublicKey(parent_path)
-            fpr = hash160(compress_public_key(parent["publicKey"]))[:4]
-
-            # Compute child info
-            childstr = path.split("/")[-1]
-            hard = 0
-            if childstr[-1] == "'" or childstr[-1] == "h" or childstr[-1] == "H":
-                childstr = childstr[:-1]
-                hard = 0x80000000
-            child = struct.pack(">I", int(childstr) + hard)
-        # Special case for m
-        else:
-            child = bytearray.fromhex("00000000")
-            fpr = child
-
-        chainCode = pubkey["chainCode"]
-        publicKey = compress_public_key(pubkey["publicKey"])
-
-        depth = len(path.split("/")) if len(path) > 0 else 0
-        depth = struct.pack("B", depth)
-
-        if self.is_testnet:
-            version = bytearray.fromhex("043587CF")
-        else:
-            version = bytearray.fromhex("0488B21E")
-        extkey = version + depth + fpr + child + chainCode + publicKey
-        checksum = hash256(extkey)[:4]
-
-        return {"xpub": base58.encode(extkey + checksum)}
-
-    # Must return a hex string with the signed transaction
-    # The tx must be in the combined unsigned transaction format
-    # Current only supports segwit signing
     @ledger_exception
-    def sign_tx(self, tx):
-        c_tx = CTransaction(tx.tx)
-        tx_bytes = c_tx.serialize_with_witness()
+    def get_pubkey_at_path(self, path: str) -> ExtendedKey:
+        path = path.replace("h", "'")
+        path = path.replace("H", "'")
+        try:
+            xpub_str = self.client.get_extended_pubkey(path=path, display=False)
+        except NotSupportedError:
+            # We will get not supported for non-standard paths
+            # If so, try again but with display=True
+            xpub_str = self.client.get_extended_pubkey(path=path, display=True)
+        return ExtendedKey.deserialize(xpub_str)
 
-        # Master key fingerprint
-        master_fpr = hash160(compress_public_key(self.app.getWalletPublicKey('')["publicKey"]))[:4]
-        # An entry per input, each with 0 to many keys to sign with
-        all_signature_attempts = [[]] * len(c_tx.vin)
+    @ledger_exception
+    def sign_tx(self, tx: PSBT) -> PSBT:
+        """
+        Sign a transaction with a Ledger device. Not all transactions can be signed by a Ledger.
 
-        # NOTE: We only support signing Segwit inputs, where we can skip over non-segwit
-        # inputs, or non-segwit inputs, where *all* inputs are non-segwit. This is due
-        # to Ledger's mutually exclusive signing steps for each type.
-        segwit_inputs = []
-        # Legacy style inputs
-        legacy_inputs = []
+        The scripts supported depend on the version of the Bitcoin Application installed on the Ledger.
 
-        has_segwit = False
-        has_legacy = False
+        For application versions 1.x and 2.0.x:
 
-        script_codes = [[]] * len(c_tx.vin)
+        - Transactions containing both segwit and non-segwit inputs are not entirely supported; only the segwit inputs will be signed in this case.
 
-        # Detect changepath, (p2sh-)p2(w)pkh only
-        change_path = ''
-        for txout, i_num in zip(c_tx.vout, range(len(c_tx.vout))):
-            # Find which wallet key could be change based on hdsplit: m/.../1/k
-            # Wallets shouldn't be sending to change address as user action
-            # otherwise this will get confused
-            for pubkey, path in tx.outputs[i_num].hd_keypaths.items():
-                if struct.pack("<I", path[0]) == master_fpr and len(path) > 2 and path[-2] == 1:
-                    # For possible matches, check if pubkey matches possible template
-                    if hash160(pubkey) in txout.scriptPubKey or hash160(bytearray.fromhex("0014") + hash160(pubkey)) in txout.scriptPubKey:
-                        change_path = ''
-                        for index in path[1:]:
-                            change_path += str(index) + "/"
-                        change_path = change_path[:-1]
+        For application versions 2.1.x and above:
 
-        for txin, psbt_in, i_num in zip(c_tx.vin, tx.inputs, range(len(c_tx.vin))):
+        - Only keys derived with standard BIP 44, 49, 84, and 86 derivation paths are supported for single signature addresses.
+        """
+        master_fp = self.get_master_fingerprint()
 
-            seq = format(txin.nSequence, 'x')
-            seq = seq.zfill(8)
-            seq = bytearray.fromhex(seq)
-            seq.reverse()
-            seq_hex = ''.join('{:02x}'.format(x) for x in seq)
+        def legacy_sign_tx() -> PSBT:
+            client = self.client
+            if not isinstance(client, LegacyClient):
+                client = LegacyClient(self.transport_client, self.chain)
+            wallet = WalletPolicy("", "wpkh(@0/**)", [""])
+            legacy_input_sigs = client.sign_psbt(tx, wallet, None)
 
+            for idx, pubkey, sig in legacy_input_sigs:
+                psbt_in = tx.inputs[idx]
+                psbt_in.partial_sigs[pubkey] = sig
+            return tx
+
+        if isinstance(self.client, LegacyClient):
+            return legacy_sign_tx()
+
+        # Make a deepcopy of this psbt. We will need to modify it to get signing to work,
+        # which will affect the caller's detection for whether signing occured.
+        psbt2 = copy.deepcopy(tx)
+        if tx.version != 2:
+            psbt2.convert_to_v2()
+
+        # Figure out which wallets are signing
+        wallets: Dict[bytes, Tuple[int, AddressType, WalletPolicy, Optional[bytes]]] = {}
+        pubkeys: Dict[int, bytes] = {}
+        for input_num, psbt_in in builtins.enumerate(psbt2.inputs):
+            utxo = None
+            scriptcode = b""
+            if psbt_in.witness_utxo:
+                utxo = psbt_in.witness_utxo
             if psbt_in.non_witness_utxo:
-                segwit_inputs.append({"value": txin.prevout.serialize() + struct.pack("<Q", psbt_in.non_witness_utxo.vout[txin.prevout.n].nValue), "witness": True, "sequence": seq_hex})
-                # We only need legacy inputs in the case where all inputs are legacy, we check
-                # later
-                ledger_prevtx = syscoinTransaction(psbt_in.non_witness_utxo.serialize())
-                legacy_inputs.append(self.app.getTrustedInput(ledger_prevtx, txin.prevout.n))
-                legacy_inputs[-1]["sequence"] = seq_hex
-                has_legacy = True
-            else:
-                segwit_inputs.append({"value": txin.prevout.serialize() + struct.pack("<Q", psbt_in.witness_utxo.nValue), "witness": True, "sequence": seq_hex})
-                has_segwit = True
+                if psbt_in.prev_txid != psbt_in.non_witness_utxo.hash:
+                    raise BadArgumentError(f"Input {input_num} has a non_witness_utxo with the wrong hash")
+                assert psbt_in.prev_out is not None
+                utxo = psbt_in.non_witness_utxo.vout[psbt_in.prev_out]
+                psbt_in.witness_utxo = utxo # Make sure that all inputs have witness_utxo too as signing mixed will fail
+            if utxo is None:
+                continue
+            scriptcode = utxo.scriptPubKey
 
-            pubkeys = []
-            signature_attempts = []
-
-            scriptCode = b""
-            witness_program = b""
-            if psbt_in.witness_utxo is not None and psbt_in.witness_utxo.is_p2sh():
-                redeemscript = psbt_in.redeem_script
-                witness_program += redeemscript
-            elif psbt_in.non_witness_utxo is not None and psbt_in.non_witness_utxo.vout[txin.prevout.n].is_p2sh():
-                redeemscript = psbt_in.redeem_script
-            elif psbt_in.witness_utxo is not None:
-                witness_program += psbt_in.witness_utxo.scriptPubKey
-            elif psbt_in.non_witness_utxo is not None:
-                # No-op
-                redeemscript = b""
-                witness_program = b""
-            else:
-                raise Exception("PSBT is missing input utxo information, cannot sign")
-
-            # Check if witness_program is script hash
-            if len(witness_program) == 34 and witness_program[0] == 0x00 and witness_program[1] == 0x20:
-                # look up witnessscript and set as scriptCode
-                witnessscript = psbt_in.witness_script
-                scriptCode += witnessscript
-            elif len(witness_program) > 0:
-                # p2wpkh
-                scriptCode += b"\x76\xa9\x14"
-                scriptCode += witness_program[2:]
-                scriptCode += b"\x88\xac"
-            elif len(witness_program) == 0:
-                if len(redeemscript) > 0:
-                    scriptCode = redeemscript
-                else:
-                    scriptCode = psbt_in.non_witness_utxo.vout[txin.prevout.n].scriptPubKey
-
-            # Save scriptcode for later signing
-            script_codes[i_num] = scriptCode
-
-            # Find which pubkeys could sign this input (should be all?)
-            for pubkey in psbt_in.hd_keypaths.keys():
-                if hash160(pubkey) in scriptCode or pubkey in scriptCode:
-                    pubkeys.append(pubkey)
-
-            # Figure out which keys in inputs are from our wallet
-            for pubkey in pubkeys:
-                keypath = psbt_in.hd_keypaths[pubkey]
-                if master_fpr == struct.pack("<I", keypath[0]):
-                    # Add the keypath strings
-                    keypath_str = ''
-                    for index in keypath[1:]:
-                        keypath_str += str(index) + "/"
-                    keypath_str = keypath_str[:-1]
-                    signature_attempts.append([keypath_str, pubkey])
-
-            all_signature_attempts[i_num] = signature_attempts
-
-        # Sign any segwit inputs
-        if has_segwit:
-            # Process them up front with all scriptcodes blank
-            blank_script_code = bytearray()
-            for i in range(len(segwit_inputs)):
-                self.app.startUntrustedTransaction(i == 0, i, segwit_inputs, blank_script_code, c_tx.nVersion)
-
-            # Number of unused fields for Nano S, only changepath and transaction in bytes req
-            self.app.finalizeInput(b"DUMMY", -1, -1, change_path, tx_bytes)
-
-            # For each input we control do segwit signature
-            for i in range(len(segwit_inputs)):
-                # Don't try to sign legacy inputs
-                if tx.inputs[i].non_witness_utxo is not None:
+            p2sh = False
+            if is_p2sh(scriptcode):
+                if len(psbt_in.redeem_script) == 0:
                     continue
-                for signature_attempt in all_signature_attempts[i]:
-                    self.app.startUntrustedTransaction(False, 0, [segwit_inputs[i]], script_codes[i], c_tx.nVersion)
-                    tx.inputs[i].partial_sigs[signature_attempt[1]] = self.app.untrustedHashSign(signature_attempt[0], "", c_tx.nLockTime, 0x01)
-        elif has_legacy:
-            first_input = True
-            # Legacy signing if all inputs are legacy
-            for i in range(len(legacy_inputs)):
-                for signature_attempt in all_signature_attempts[i]:
-                    assert(tx.inputs[i].non_witness_utxo is not None)
-                    self.app.startUntrustedTransaction(first_input, i, legacy_inputs, script_codes[i], c_tx.nVersion)
-                    self.app.finalizeInput(b"DUMMY", -1, -1, change_path, tx_bytes)
-                    tx.inputs[i].partial_sigs[signature_attempt[1]] = self.app.untrustedHashSign(signature_attempt[0], "", c_tx.nLockTime, 0x01)
-                    first_input = False
+                scriptcode = psbt_in.redeem_script
+                p2sh = True
 
-        # Send PSBT back
-        return {'psbt': tx.serialize()}
+            is_wit, wit_ver, _ = is_witness(scriptcode)
 
-    # Must return a base64 encoded string with the signed message
-    # The message can be any string
+            script_addrtype = AddressType.LEGACY
+            if is_wit:
+                if p2sh:
+                    if wit_ver == 0:
+                        script_addrtype = AddressType.SH_WIT
+                    else:
+                        raise BadArgumentError("Cannot have witness v1+ in p2sh")
+                else:
+                    if wit_ver == 0:
+                        script_addrtype = AddressType.WIT
+                    elif wit_ver == 1:
+                        script_addrtype = AddressType.TAP
+                    else:
+                        continue
+
+            # Check if P2WSH
+            if is_p2wsh(scriptcode):
+                if len(psbt_in.witness_script) == 0:
+                    continue
+                scriptcode = psbt_in.witness_script
+
+            multisig = parse_multisig(scriptcode)
+            if multisig is not None:
+                k, ms_pubkeys = multisig
+
+                # Figure out the parent xpubs
+                key_exprs: List[str] = []
+                ok = True
+                our_keys = 0
+                for pub in ms_pubkeys:
+                    if pub in psbt_in.hd_keypaths:
+                        pk_origin = psbt_in.hd_keypaths[pub]
+                        if pk_origin.fingerprint == master_fp:
+                            our_keys += 1
+                            pubkeys[input_num] = pub
+                        for xpub_bytes, xpub_origin in psbt2.xpub.items():
+                            xpub = ExtendedKey.from_bytes(xpub_bytes)
+                            if (xpub_origin.fingerprint == pk_origin.fingerprint) and (xpub_origin.path == pk_origin.path[:len(xpub_origin.path)]):
+                                key_exprs.append(PubkeyProvider(xpub_origin, xpub.to_string(), None).to_string(hardened_char="'"))
+                                break
+                        else:
+                            # No xpub, Ledger will not accept this multisig
+                            ok = False
+
+                if not ok:
+                    continue
+
+                # Make and register the MultisigWallet
+                msw = MultisigWallet(f"{k} of {len(key_exprs)} Multisig", script_addrtype, k, key_exprs)
+                msw_id = msw.id
+                if msw_id not in wallets:
+                    _, registered_hmac = self.client.register_wallet(msw)
+                    wallets[msw_id] = (
+                        signing_priority[script_addrtype],
+                        script_addrtype,
+                        msw,
+                        registered_hmac,
+                    )
+            else:
+                def process_origin(origin: KeyOriginInfo) -> None:
+                    if not is_standard_path(origin.path, script_addrtype, self.chain):
+                        # TODO: Deal with non-default wallets
+                        return
+                    policy = self._get_singlesig_default_wallet_policy(script_addrtype, origin.path[2])
+                    wallets[policy.id] = (
+                        signing_priority[script_addrtype],
+                        script_addrtype,
+                        self._get_singlesig_default_wallet_policy(script_addrtype, origin.path[2]),
+                        None, # Wallet hmac
+                    )
+
+                for key, origin in psbt_in.hd_keypaths.items():
+                    if origin.fingerprint == master_fp:
+                        if not multisig:
+                            process_origin(origin)
+                        pubkeys[input_num] = key
+
+                for key, (leaf_hashes, origin) in psbt_in.tap_bip32_paths.items():
+                    # TODO: Support script path signing
+                    if key == psbt_in.tap_internal_key and origin.fingerprint == master_fp:
+                        process_origin(origin)
+                        pubkeys[input_num] = key
+
+        # For each wallet, sign
+        for _, (_, addrtype, wallet, wallet_hmac) in sorted(wallets.items(), key=lambda y: y[1][0]):
+            if addrtype == AddressType.LEGACY:
+                # We need to remove witness_utxo for legacy inputs when signing with legacy otherwise signing will fail
+                for psbt_in in psbt2.inputs:
+                    utxo = None
+                    if psbt_in.witness_utxo:
+                        utxo = psbt_in.witness_utxo
+                    if utxo is None:
+                        continue
+                    is_wit, _, _ = is_witness(utxo.scriptPubKey)
+                    if not is_wit:
+                        psbt_in.witness_utxo = None
+
+            input_sigs = self.client.sign_psbt(psbt2, wallet, wallet_hmac)
+
+            for idx, pubkey, sig in input_sigs:
+                psbt_in = psbt2.inputs[idx]
+
+                utxo = None
+                if psbt_in.witness_utxo:
+                    utxo = psbt_in.witness_utxo
+                if psbt_in.non_witness_utxo:
+                    assert psbt_in.prev_out is not None
+                    utxo = psbt_in.non_witness_utxo.vout[psbt_in.prev_out]
+                assert utxo is not None
+
+                is_wit, wit_ver, _ = utxo.is_witness()
+
+                if is_wit and wit_ver >= 1:
+                    # TODO: Deal with script path signatures
+                    # For now, assume key path signature
+                    psbt_in.tap_key_sig = sig
+                else:
+                    psbt_in.partial_sigs[pubkey] = sig
+
+        # Extract the sigs from psbt2 and put them into tx
+        for sig_in, psbt_in in zip(psbt2.inputs, tx.inputs):
+            psbt_in.partial_sigs.update(sig_in.partial_sigs)
+            psbt_in.tap_script_sigs.update(sig_in.tap_script_sigs)
+            if len(sig_in.tap_key_sig) != 0 and len(psbt_in.tap_key_sig) == 0:
+                psbt_in.tap_key_sig = sig_in.tap_key_sig
+
+        return tx
+
     @ledger_exception
-    def sign_message(self, message, keypath):
+    def sign_message(self, message: Union[str, bytes], keypath: str) -> str:
         if not check_keypath(keypath):
-            raise BadArgumentError("Invalid keypath")
-        message = bytearray(message, 'utf-8')
-        keypath = keypath[2:]
-        # First display on screen what address you're signing for
-        self.app.getWalletPublicKey(keypath, True)
-        self.app.signMessagePrepare(keypath, message)
-        signature = self.app.signMessageSign()
+            raise ValueError("Invalid keypath")
 
-        # Make signature into standard syscoin format
-        rLength = signature[3]
-        r = signature[4: 4 + rLength]
-        sLength = signature[4 + rLength + 1]
-        s = signature[4 + rLength + 2:]
-        if rLength == 33:
-            r = r[1:]
-        if sLength == 33:
-            s = s[1:]
+        # Ledger requires the character "'" for hardened derivations since version 2.0.0
+        keypath = keypath.replace("h", "'")
 
-        sig = bytearray(chr(27 + 4 + (signature[0] & 0x01)), 'utf8') + r + s
+        return self.client.sign_message(message, keypath)
 
-        return {"signature": base64.b64encode(sig).decode('utf-8')}
+    def _get_singlesig_default_wallet_policy(self, addr_type: AddressType, account: int) -> WalletPolicy:
+        if addr_type == AddressType.LEGACY:
+            template = "pkh(@0/**)"
+        elif addr_type == AddressType.WIT:
+            template = "wpkh(@0/**)"
+        elif addr_type == AddressType.SH_WIT:
+            template = "sh(wpkh(@0/**))"
+        elif addr_type == AddressType.TAP:
+            template = "tr(@0/**)"
+        else:
+            BadArgumentError("Unknown address type")
+
+        path = [H_(get_bip44_purpose(addr_type)), H_(get_bip44_chain(self.chain)), H_(account)]
+
+        # Build a PubkeyProvider for the key we're going to use
+        origin = KeyOriginInfo(self.get_master_fingerprint(), path)
+        pk_prov = PubkeyProvider(origin, self.get_pubkey_at_path(f"m{origin._path_string()}").to_string(), None)
+        key_str = pk_prov.to_string(hardened_char="'")
+
+        # Make the Wallet object
+        return WalletPolicy(name="", descriptor_template=template, keys_info=[key_str])
 
     @ledger_exception
-    def display_address(self, keypath, p2sh_p2wpkh, bech32):
-        if not check_keypath(keypath):
-            raise BadArgumentError("Invalid keypath")
-        output = self.app.getWalletPublicKey(keypath[2:], True, (p2sh_p2wpkh or bech32), bech32)
-        return {'address': output['address'][12:-2]} # HACK: A bug in getWalletPublicKey results in the address being returned as the string "bytearray(b'<address>')". This extracts the actual address to work around this.
+    def display_singlesig_address(
+        self,
+        keypath: str,
+        addr_type: AddressType,
+    ) -> str:
+        path = parse_path(keypath)
 
-    # Setup a new device
-    def setup_device(self, label='', passphrase=''):
+        if isinstance(self.client, LegacyClient):
+            if addr_type == AddressType.LEGACY:
+                template = "pkh(@0/**)"
+            elif addr_type == AddressType.WIT:
+                template = "wpkh(@0/**)"
+            elif addr_type == AddressType.SH_WIT:
+                template = "sh(wpkh(@0/**))"
+            elif addr_type == AddressType.TAP:
+                BadArgumentError("Taproot is not supported by this version of the Bitcoin App")
+            else:
+                BadArgumentError("Unknown address type")
+
+            origin = KeyOriginInfo(self.get_master_fingerprint(), path)
+            wallet = WalletPolicy(name="", descriptor_template=template, keys_info=["[{}]".format(origin.to_string(hardened_char="'"))])
+        else:
+            if not is_standard_path(path, addr_type, self.chain):
+                raise BadArgumentError("Ledger requires BIP 44 standard paths")
+
+            wallet = self._get_singlesig_default_wallet_policy(addr_type, path[2])
+
+        return self.client.get_wallet_address(wallet, None, path[-2], path[-1], True)
+
+    @ledger_exception
+    def display_multisig_address(
+        self,
+        addr_type: AddressType,
+        multisig: MultisigDescriptor,
+    ) -> str:
+        if isinstance(self.client, LegacyClient):
+            raise BadArgumentError("Displaying multisignature addresses is not supported by this version of the Bitcoin App")
+
+        def is_valid_der_path(path: Optional[str]) -> bool:
+            if path is None:
+                return False
+            path_parts = path.split("/")
+            return len(path_parts) == 3 and path_parts[1] in ["0", "1"] and path_parts[2].isdigit() and 0 <= int(path_parts[2]) <= 0x7fffffff
+
+        if any(not is_valid_der_path(pk.deriv_path) for pk in multisig.pubkeys):
+            raise BadArgumentError("Ledger Bitcoin app requires derivation paths ending with /0/* or /1/* for multisig")
+
+        if not (all(pk.deriv_path == multisig.pubkeys[0].deriv_path for pk in multisig.pubkeys)):
+            raise BadArgumentError("Ledger Bitcoin app requires all derivation paths to end with /0/*, or all with /1/* for multisig")
+
+        if any(pk.origin is not None and len(pk.origin.path) > 4 for pk in multisig.pubkeys):
+            raise BadArgumentError("Ledger Bitcoin app requires extended keys with derivation length at most 4")
+
+        def format_key_info(pubkey: PubkeyProvider) -> str:
+            assert pubkey.origin is not None and pubkey.extkey is not None
+            hardened_char = "'"
+            return f"[{pubkey.origin.to_string(hardened_char=hardened_char)}]{pubkey.extkey.to_string()}"
+
+        keys_info = [format_key_info(pk) for pk in multisig.pubkeys]
+
+        multisig_wallet = MultisigWallet(f"{multisig.thresh} of {len(keys_info)} Multisig", addr_type, multisig.thresh, keys_info=keys_info, sorted=multisig.is_sorted)
+        _, registered_hmac = self.client.register_wallet(multisig_wallet)
+
+        assert multisig.pubkeys[0].deriv_path is not None  # already checked above with is_valid_der_path
+        change = 0 if multisig.pubkeys[0].deriv_path[:3] == "/0/" else 1
+        address_index = int(multisig.pubkeys[0].deriv_path.split("/")[2])
+
+        return self.client.get_wallet_address(multisig_wallet, registered_hmac, change, address_index, True)
+
+    def setup_device(self, label: str = "", passphrase: str = "") -> bool:
+        """
+        Ledgers do not support setup via software.
+
+        :raises UnavailableActionError: Always, this function is unavailable
+        """
         raise UnavailableActionError('The Ledger Nano S and X do not support software setup')
 
-    # Wipe this device
-    def wipe_device(self):
+    def wipe_device(self) -> bool:
+        """
+        Ledgers do not support wiping via software.
+
+        :raises UnavailableActionError: Always, this function is unavailable
+        """
         raise UnavailableActionError('The Ledger Nano S and X do not support wiping via software')
 
-    # Restore device from mnemonic or xprv
-    def restore_device(self, label=''):
+    def restore_device(self, label: str = "", word_count: int = 24) -> bool:
+        """
+        Ledgers do not support restoring via software.
+
+        :raises UnavailableActionError: Always, this function is unavailable
+        """
         raise UnavailableActionError('The Ledger Nano S and X do not support restoring via software')
 
-    # Begin backup process
-    def backup_device(self, label='', passphrase=''):
+    def backup_device(self, label: str = "", passphrase: str = "") -> bool:
+        """
+        Ledgers do not support backing up via software.
+
+        :raises UnavailableActionError: Always, this function is unavailable
+        """
         raise UnavailableActionError('The Ledger Nano S and X do not support creating a backup via software')
 
-    # Close the device
-    def close(self):
-        self.dongle.close()
+    def close(self) -> None:
+        self.client.stop()
 
-    # Prompt pin
-    def prompt_pin(self):
+    def prompt_pin(self) -> bool:
+        """
+        Ledgers do not need a PIN sent from the host.
+
+        :raises UnavailableActionError: Always, this function is unavailable
+        """
         raise UnavailableActionError('The Ledger Nano S and X do not need a PIN sent from the host')
 
-    # Send pin
-    def send_pin(self, pin):
+    def send_pin(self, pin: str) -> bool:
+        """
+        Ledgers do not need a PIN sent from the host.
+
+        :raises UnavailableActionError: Always, this function is unavailable
+        """
         raise UnavailableActionError('The Ledger Nano S and X do not need a PIN sent from the host')
 
-def enumerate(password=''):
+    def toggle_passphrase(self) -> bool:
+        """
+        Ledgers do not support toggling passphrase from the host.
+
+        :raises UnavailableActionError: Always, this function is unavailable
+        """
+        raise UnavailableActionError('The Ledger Nano S and X do not support toggling passphrase from the host')
+
+    @ledger_exception
+    def can_sign_taproot(self) -> bool:
+        """
+        Ledgers support Taproot if the Bitcoin App version greater than 2.0.0; support here is for versions 2.1.0 and above.
+
+        :returns: True if Bitcoin App version is greater than or equal to 2.1.0, and not the "Legacy" release. False otherwise.
+        """
+        return isinstance(self.client, NewClient)
+
+
+def enumerate(password: Optional[str] = None, expert: bool = False, chain: Chain = Chain.MAIN) -> List[Dict[str, Any]]:
     results = []
-    for device_id in LEDGER_DEVICE_IDS:
-        for d in hid.enumerate(LEDGER_VENDOR_ID, device_id):
-            if ('interface_number' in d and d['interface_number'] == 0
-                    or ('usage_page' in d and d['usage_page'] == 0xffa0)):
-                d_data = {}
+    devices = []
+    devices.extend(hid.enumerate(LEDGER_VENDOR_ID, 0))
+    devices.append({'path': SIMULATOR_PATH.encode(), 'interface_number': 0, 'product_id': 0x1000})
+    for d in devices:
+        if ('interface_number' in d and d['interface_number'] == 0
+                or ('usage_page' in d and d['usage_page'] == 0xffa0)):
+            d_data: Dict[str, Any] = {}
 
-                path = d['path'].decode()
-                d_data['type'] = 'ledger'
-                d_data['model'] = 'ledger_nano_x' if device_id == 0x0004 else 'ledger_nano_s'
-                d_data['path'] = path
+            path = d['path'].decode()
+            d_data['type'] = 'ledger'
+            model = d['product_id'] >> 8
+            if model in LEDGER_MODEL_IDS.keys():
+                d_data['model'] = LEDGER_MODEL_IDS[model]
+            elif d['product_id'] in LEDGER_LEGACY_PRODUCT_IDS.keys():
+                d_data['model'] = LEDGER_LEGACY_PRODUCT_IDS[d['product_id']]
+            else:
+                continue
+            d_data['label'] = None
+            d_data['path'] = path
 
-                client = None
-                with handle_errors(common_err_msgs["enumerate"], d_data):
+            if path == SIMULATOR_PATH:
+                d_data['model'] += '_simulator'
+
+            client = None
+            with handle_errors(common_err_msgs["enumerate"], d_data):
+                try:
                     client = LedgerClient(path, password)
-                    master_xpub = client.get_pubkey_at_path('m/0h')['xpub']
-                    d_data['fingerprint'] = get_xpub_fingerprint_hex(master_xpub)
+                    d_data['fingerprint'] = client.get_master_fingerprint().hex()
                     d_data['needs_pin_sent'] = False
                     d_data['needs_passphrase_sent'] = False
+                except (BTChipException, ConnectionRefusedError):
+                    # Ignore simulator if there's an exception, means it isn't there
+                    if path == SIMULATOR_PATH:
+                        continue
+                    else:
+                        raise
+                except UnknownDeviceError:
+                    # This only happens if the ledger is not in the Bitcoin app, so skip it
+                    continue
 
-                if client:
-                    client.close()
+            if client:
+                client.close()
 
-                results.append(d_data)
+            results.append(d_data)
+
     return results
