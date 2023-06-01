@@ -153,7 +153,7 @@ class LedgerClient(HardwareWalletClient):
                 port = int(split_path[2])
                 self.transport_client = TransportClient(interface="tcp", server=server, port=port, debug=is_debug)
             else:
-                self.transport_client = TransportClient(interface="hid", debug=is_debug, hid_path=path.encode())
+                self.transport_client = TransportClient(interface="hid", debug=is_debug, path=path.encode())
 
             self.client = createClient(self.transport_client, chain=self.chain, debug=is_debug)
         except NotSupportedError as e:

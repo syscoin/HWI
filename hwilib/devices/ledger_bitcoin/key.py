@@ -1,3 +1,5 @@
+# Original version: https://github.com/bitcoin-core/HWI/blob/3fe369d0379212fae1c72729a179d133b0adc872/hwilib/key.py
+
 #!/usr/bin/env python3
 # Copyright (c) 2020 The HWI developers
 # Distributed under the MIT software license, see the accompanying
@@ -11,7 +13,7 @@ Classes and utilities for working with extended public keys, key origins, and ot
 """
 
 from . import _base58 as base58
-from .common import (
+from ...common import (
     AddressType,
     Chain,
     hash256,
@@ -97,6 +99,36 @@ def point_to_bytes(p: Point) -> bytes:
     if p is None:
         raise ValueError("Cannot convert None to bytes")
     return (b'\x03' if p[1] & 1 else b'\x02') + p[0].to_bytes(32, byteorder="big")
+
+def int_from_bytes(b: bytes) -> int:
+    return int(binascii.hexlify(b), 16)
+
+def lift_x(x: int) -> 'Point':
+    c = (pow(x, 3, p) + 7) % p
+    y = pow(c, (p + 1) // 4, p)
+
+    assert(c == y * y % p)
+
+    return (x, p - y if y & 1 else y)
+
+def tagged_hash(tag: str, data: bytes) -> bytes:
+    hashtag = hashlib.sha256(tag.encode()).digest()
+    return hashlib.sha256(hashtag + hashtag + data).digest()
+
+
+def taproot_tweak_pubkey(pubkey: bytes, h: bytes) -> Tuple[int, bytes]:
+    t = int_from_bytes(tagged_hash("TapTweak", pubkey + h))
+    if t >= p:
+        raise ValueError
+    Q = point_add(lift_x(int_from_bytes(pubkey)), point_mul(G, t))
+    return 0 if Q[1] & 1 == 0 else 1, Q[0].to_bytes(32, byteorder="big")
+
+
+def get_taproot_output_key(derived_key: bytes) -> bytes:
+    assert(len(derived_key) == 33)
+    p = derived_key[1:]
+    _, key = taproot_tweak_pubkey(p, b'')
+    return key
 
 
 # An extended public key (xpub) or private key (xprv). Just a data container for now.
@@ -210,6 +242,43 @@ class ExtendedKey(object):
         d['pubkey'] = binascii.hexlify(self.pubkey).decode()
         return d
 
+    def derive_priv(self, i: int) -> 'ExtendedKey':
+        """
+        Derive the private key at the given child index.
+
+        :param i: The child index of the pubkey to derive
+        """
+        if not self.privkey:
+            raise ValueError("Can only derive a private key from an extended private key")
+
+        # Data to HMAC
+        if is_hardened(i):
+            data = b'\0' + self.privkey + struct.pack(">L", i)
+        else:
+            data = self.pubkey + struct.pack(">L", i)
+
+        # Get HMAC of data
+        Ihmac = hmac.new(self.chaincode, data, hashlib.sha512).digest()
+        Il = Ihmac[:32]
+        Ir = Ihmac[32:]
+
+        # Construct new key material from Il and current private key
+        Il_int = int.from_bytes(Il, byteorder="big")
+        if Il_int > n:
+            return None
+
+        privkey_int = int.from_bytes(self.privkey, byteorder="big")
+        k_int = (Il_int + privkey_int) % n
+        if (k_int == 0):
+            return None
+
+        privkey = k_int.to_bytes(32, byteorder="big")
+        pubkey = point_to_bytes(point_mul(G, k_int))
+
+        chaincode = Ir
+        fingerprint = hash160(self.pubkey)[0:4]
+        return ExtendedKey(ExtendedKey.TESTNET_PRIVATE if self.is_testnet else ExtendedKey.MAINNET_PRIVATE, self.depth + 1, fingerprint, i, chaincode, privkey, pubkey)
+
     def derive_pub(self, i: int) -> 'ExtendedKey':
         """
         Derive the public key at the given child index.
@@ -237,6 +306,17 @@ class ExtendedKey(object):
         fingerprint = hash160(self.pubkey)[0:4]
         return ExtendedKey(ExtendedKey.TESTNET_PUBLIC if self.is_testnet else ExtendedKey.MAINNET_PUBLIC, self.depth + 1, fingerprint, i, chaincode, None, pubkey)
 
+    def derive_priv_path(self, path: Sequence[int]) -> 'ExtendedKey':
+        """
+        Derive the private key at the given path
+
+        :param path: Sequence of integers for the path of the key to derive
+        """
+        key = self
+        for i in path:
+            key = key.derive_priv(i)
+        return key
+
     def derive_pub_path(self, path: Sequence[int]) -> 'ExtendedKey':
         """
         Derive the public key at the given path
@@ -248,11 +328,21 @@ class ExtendedKey(object):
             key = key.derive_pub(i)
         return key
 
+    def neutered(self) -> 'ExtendedKey':
+        """
+        Returns the public key corresponding to this private key.
+        """
+        if not self.is_private:
+            raise ValueError("It is already a public key")
+
+        return ExtendedKey(ExtendedKey.TESTNET_PUBLIC if self.is_testnet else ExtendedKey.MAINNET_PUBLIC, self.depth, self.parent_fingerprint, self.child_num, self.chaincode, None, self.pubkey)
+
 
 class KeyOriginInfo(object):
     """
     Object representing the origin of a key.
     """
+
     def __init__(self, fingerprint: bytes, path: Sequence[int]) -> None:
         """
         :param fingerprint: The 4 byte BIP 32 fingerprint of a parent key from which this key is derived from
@@ -280,23 +370,23 @@ class KeyOriginInfo(object):
         r += struct.pack("<" + "I" * len(self.path), *self.path)
         return r
 
-    def _path_string(self, hardened_char: str = "h") -> str:
+    def _path_string(self) -> str:
         s = ""
         for i in self.path:
             hardened = is_hardened(i)
             i &= ~HARDENED_FLAG
             s += "/" + str(i)
             if hardened:
-                s += hardened_char
+                s += "h"
         return s
 
-    def to_string(self, hardened_char: str = "h") -> str:
+    def to_string(self) -> str:
         """
         Return the KeyOriginInfo as a string in the form <fingerprint>/<index>/<index>/...
         This is the same way that KeyOriginInfo is shown in descriptors
         """
         s = binascii.hexlify(self.fingerprint).decode()
-        s += self._path_string(hardened_char)
+        s += self._path_string()
         return s
 
     @classmethod
@@ -365,7 +455,7 @@ def parse_path(nstr: str) -> List[int]:
 
 def get_bip44_purpose(addrtype: AddressType) -> int:
     """
-    Determine the BIP 44 purpose based on the given :class:`~hwilib.common.AddressType`.
+    Determine the BIP 44 purpose based on the given :class:`~hwilib...common.AddressType`.
 
     :param addrtype: The address type
     """
@@ -390,42 +480,6 @@ def get_bip44_chain(chain: Chain) -> int:
     :param chain: The chain
     """
     if chain == Chain.MAIN:
-        return 57
+        return 0
     else:
         return 1
-
-def get_addrtype_from_bip44_purpose(index: int) -> Optional[AddressType]:
-    purpose = index & ~HARDENED_FLAG
-
-    if purpose == 44:
-        return AddressType.LEGACY
-    elif purpose == 49:
-        return AddressType.SH_WIT
-    elif purpose == 84:
-        return AddressType.WIT
-    elif purpose == 86:
-        return AddressType.TAP
-    else:
-        return None
-
-def is_standard_path(
-    path: Sequence[int],
-    addrtype: AddressType,
-    chain: Chain,
-) -> bool:
-    if len(path) != 5:
-        return False
-    if not is_hardened(path[0]) or not is_hardened(path[1]) or not is_hardened(path[2]):
-        return False
-    if is_hardened(path[3]) or is_hardened(path[4]):
-        return False
-    computed_addrtype = get_addrtype_from_bip44_purpose(path[0])
-    if computed_addrtype is None:
-        return False
-    if computed_addrtype != addrtype:
-        return False
-    if path[1] != H_(get_bip44_chain(chain)):
-        return False
-    if path[3] not in [0, 1]:
-        return False
-    return True

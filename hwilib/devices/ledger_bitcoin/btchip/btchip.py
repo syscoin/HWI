@@ -17,6 +17,7 @@
 ********************************************************************************
 """
 
+from .btchipComm import *
 from .bitcoinTransaction import *
 from .bitcoinVarint import *
 from .btchipException import *

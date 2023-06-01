@@ -1,5 +1,5 @@
 """
-This module provides a compatibility layer between the python client of the Ledger Nano Bitcoin app v2 and the v1.6.5,
+This module provides a compatibility layer between the python client of the Ledger Nano Syscoin app v2 and the v1.6.5,
 by translating client requests to the API of the app v1.6.5.
 
 The bulk of the code is taken from bitcoin-core/HWI, with the necessary adaptations.
@@ -10,16 +10,17 @@ import struct
 import re
 import base64
 
+from .client_base import PartialSignature
 from .client import Client, TransportClient
 
 from typing import List, Tuple, Optional, Union
 
 from ...common import AddressType, Chain, hash160
-from ...key import ExtendedKey, parse_path
-from ...psbt import PSBT
+from .key import ExtendedKey, parse_path
+from .psbt import PSBT, normalize_psbt
 from .wallet import WalletPolicy
 
-from ..._script import is_p2sh, is_witness, is_p2wpkh, is_p2wsh
+from ._script import is_p2sh, is_witness, is_p2wpkh, is_p2wsh
 
 from .btchip.btchip import btchip
 from .btchip.btchipUtils import compress_public_key
@@ -27,19 +28,35 @@ from .btchip.bitcoinTransaction import bitcoinTransaction
 
 
 def get_address_type_for_policy(policy: WalletPolicy) -> AddressType:
-    if policy.descriptor_template == "pkh(@0/**)":
+    if policy.descriptor_template in ["pkh(@0/**)", "pkh(@0/<0;1>/*)"]:
         return AddressType.LEGACY
-    elif policy.descriptor_template == "wpkh(@0/**)":
+    elif policy.descriptor_template in ["wpkh(@0/**)", "wpkh(@0/<0:1>/*)"]:
         return AddressType.WIT
-    elif policy.descriptor_template == "sh(wpkh(@0/**))":
+    elif policy.descriptor_template in ["sh(wpkh(@0/**))", "sh(wpkh(@0/<0;1>/*))"]:
         return AddressType.SH_WIT
     else:
         raise ValueError("Invalid or unsupported policy")
 
 
+# minimal checking of string keypath
+# taken from HWI
+def check_keypath(key_path: str) -> bool:
+    parts = re.split("/", key_path)
+    if parts[0] != "m":
+        return False
+    # strip hardening chars
+    for index in parts[1:]:
+        index_int = re.sub('[hH\']', '', index)
+        if not index_int.isdigit():
+            return False
+        if int(index_int) > 0x80000000:
+            return False
+    return True
+
+
 class DongleAdaptor:
     # TODO: type for comm_client
-    def __init__(self, comm_client) -> None:
+    def __init__(self, comm_client):
         self.comm_client = comm_client
 
     def exchange(self, apdu: Union[bytes, bytearray]) -> bytearray:
@@ -53,12 +70,15 @@ class DongleAdaptor:
         return bytearray(self.comm_client.apdu_exchange(cla, ins, data, p1, p2))
 
 class LegacyClient(Client):
-    """Wrapper for Ledger Bitcoin app before version 2.0.0."""
+    """Wrapper for Ledger Syscoin app before version 2.0.0."""
 
-    def __init__(self, comm_client: TransportClient, chain: Chain = Chain.MAIN):
-        super().__init__(comm_client, chain)
+    def __init__(self, comm_client: TransportClient, chain: Chain = Chain.MAIN, debug: bool = False):
+        super().__init__(comm_client, chain, debug)
 
         self.app = btchip(DongleAdaptor(comm_client))
+
+        if self.app.getAppName() not in ["Syscoin", "Syscoin Legacy", "Syscoin Test", "Syscoin Test Legacy", "app"]:
+            raise ValueError("Ledger is not in either the Syscoin or Syscoin Testnet app")
 
     def get_extended_pubkey(self, path: str, display: bool = False) -> str:
         # mostly taken from HWI
@@ -98,14 +118,14 @@ class LegacyClient(Client):
         return xpub.to_string()
 
     def register_wallet(self, wallet: WalletPolicy) -> Tuple[bytes, bytes]:
-        raise NotImplementedError # legacy app does not have this functionality
+        raise NotImplementedError  # legacy app does not have this functionality
 
     def get_wallet_address(
         self,
         wallet: WalletPolicy,
         wallet_hmac: Optional[bytes],
-        change: int, # Ignored
-        address_index: int, # Ignored
+        change: int,
+        address_index: int,
         display: bool,
     ) -> str:
         # TODO: check keypath
@@ -132,12 +152,11 @@ class LegacyClient(Client):
 
         p2sh_p2wpkh = addr_type == AddressType.SH_WIT
         bech32 = addr_type == AddressType.WIT
-        output = self.app.getWalletPublicKey(key_origin_path, display, p2sh_p2wpkh or bech32, bech32)
+        output = self.app.getWalletPublicKey(f"{key_origin_path}/{change}/{address_index}", display, p2sh_p2wpkh or bech32, bech32)
         assert isinstance(output["address"], str)
-        return output['address'][12:-2] # HACK: A bug in getWalletPublicKey results in the address being returned as the string "bytearray(b'<address>')". This extracts the actual address to work around this.
+        return output['address'][12:-2]  # HACK: A bug in getWalletPublicKey results in the address being returned as the string "bytearray(b'<address>')". This extracts the actual address to work around this.
 
-    # NOTE: This is different from the new API, but we need it for multisig support.
-    def sign_psbt(self, psbt: PSBT, wallet: WalletPolicy, wallet_hmac: Optional[bytes]) -> List[Tuple[int, bytes, bytes]]:
+    def sign_psbt(self, psbt: Union[PSBT, bytes, str], wallet: WalletPolicy, wallet_hmac: Optional[bytes]) -> List[Tuple[int, PartialSignature]]:
         if wallet_hmac is not None or wallet.n_keys != 1:
             raise NotImplementedError("Policy wallets are only supported from version 2.0.0. Please update your Ledger hardware wallet")
 
@@ -147,11 +166,14 @@ class LegacyClient(Client):
         if wallet.descriptor_template not in ["pkh(@0/**)", "pkh(@0/<0;1>/*)", "wpkh(@0/**)", "wpkh(@0/<0;1>/*)", "sh(wpkh(@0/**))", "sh(wpkh(@0/<0;1>/*))"]:
             raise NotImplementedError("Unsupported policy")
 
+        psbt = normalize_psbt(psbt)
+
         # the rest of the code is basically the HWI code, and it ignores wallet
 
         tx = psbt
 
-        c_tx = tx.get_unsigned_tx()
+        #c_tx = tx.get_unsigned_tx()
+        c_tx = tx.tx
         tx_bytes = c_tx.serialize_with_witness()
 
         # Master key fingerprint
@@ -259,7 +281,7 @@ class LegacyClient(Client):
 
             all_signature_attempts[i_num] = signature_attempts
 
-        result: List[int, bytes, bytes] = []
+        result: List[Tuple(int, PartialSignature)] = []
 
         # Sign any segwit inputs
         if has_segwit:
@@ -276,18 +298,29 @@ class LegacyClient(Client):
                 for signature_attempt in all_signature_attempts[i]:
                     self.app.startUntrustedTransaction(False, 0, [segwit_inputs[i]], script_codes[i], c_tx.nVersion)
 
-                    result.append((i, signature_attempt[1], self.app.untrustedHashSign(signature_attempt[0], "", c_tx.nLockTime, 0x01)))
+                    # tx.inputs[i].partial_sigs[signature_attempt[1]] = self.app.untrustedHashSign(signature_attempt[0], "", c_tx.nLockTime, 0x01)
 
+                    partial_sig = PartialSignature(
+                        signature=self.app.untrustedHashSign(signature_attempt[0], "", c_tx.nLockTime, 0x01),
+                        pubkey=signature_attempt[1]
+                    )
+                    result.append((i, partial_sig))
         elif has_legacy:
             first_input = True
             # Legacy signing if all inputs are legacy
             for i in range(len(legacy_inputs)):
                 for signature_attempt in all_signature_attempts[i]:
-                    assert(tx.inputs[i].non_witness_utxo is not None)
+                    assert (tx.inputs[i].non_witness_utxo is not None)
                     self.app.startUntrustedTransaction(first_input, i, legacy_inputs, script_codes[i], c_tx.nVersion)
                     self.app.finalizeInput(b"DUMMY", -1, -1, change_path, tx_bytes)
 
-                    result.append((i, signature_attempt[1], self.app.untrustedHashSign(signature_attempt[0], "", c_tx.nLockTime, 0x01)))
+                    #tx.inputs[i].partial_sigs[signature_attempt[1]] = self.app.untrustedHashSign(signature_attempt[0], "", c_tx.nLockTime, 0x01)
+
+                    partial_sig = PartialSignature(
+                        signature=self.app.untrustedHashSign(signature_attempt[0], "", c_tx.nLockTime, 0x01),
+                        pubkey=signature_attempt[1]
+                    )
+                    result.append((i, partial_sig))
 
                     first_input = False
 
@@ -299,6 +332,10 @@ class LegacyClient(Client):
         return hash160(compress_public_key(master_pubkey["publicKey"]))[:4]
 
     def sign_message(self, message: Union[str, bytes], keypath: str) -> str:
+        # copied verbatim from HWI
+
+        if not check_keypath(keypath):
+            raise ValueError("Invalid keypath")
         if isinstance(message, str):
             message = bytearray(message, 'utf-8')
         else:

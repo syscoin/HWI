@@ -1,7 +1,10 @@
-from typing import Tuple, Optional, Union, List
+from dataclasses import dataclass
+from typing import List, Tuple, Optional, Union, Literal
 from io import BytesIO
 
-from .ledgercomm import Transport
+from ledgercomm.interfaces.hid_device import HID
+
+from .transport import Transport
 
 from ...common import Chain
 
@@ -9,8 +12,8 @@ from .command_builder import DefaultInsType
 from .exception import DeviceException
 
 from .wallet import WalletPolicy
-from ...psbt import PSBT
-from ..._serialize import deser_string
+from .psbt import PSBT
+from ._serialize import deser_string
 
 try:
     from speculos.client import ApduException
@@ -24,8 +27,8 @@ except ImportError:
 
 
 class TransportClient:
-    def __init__(self, interface: str = "tcp", server: str = "127.0.0.1", port: int = 9999, hid_path: Optional[bytes] = None, debug: bool = False):
-        self.transport = Transport('hid', debug=debug, hid_path=hid_path) if interface == 'hid' else Transport(interface, server, port, debug)
+    def __init__(self, interface: Literal['hid', 'tcp'] = "tcp", *, server: str = "127.0.0.1", port: int = 9999, path: Optional[str] = None, hid: Optional[HID] = None, debug: bool = False):
+        self.transport = Transport('hid', path=path, hid=hid, debug=debug) if interface == 'hid' else Transport(interface, server=server, port=port, debug=debug)
 
     def apdu_exchange(
         self, cla: int, ins: int, data: bytes = b"", p1: int = 0, p2: int = 0
@@ -46,15 +49,56 @@ class TransportClient:
         self.transport.close()
 
 
+def print_apdu(apdu_dict: dict) -> None:
+    serialized_apdu = b''.join([
+        apdu_dict["cla"].to_bytes(1, byteorder='big'),
+        apdu_dict["ins"].to_bytes(1, byteorder='big'),
+        apdu_dict["p1"].to_bytes(1, byteorder='big'),
+        apdu_dict["p2"].to_bytes(1, byteorder='big'),
+        len(apdu_dict["data"]).to_bytes(1, byteorder='big'),
+        apdu_dict["data"]
+    ])
+    print(f"=> {serialized_apdu.hex()}")
+
+
+def print_response(sw: int, data: bytes) -> None:
+    print(f"<= {data.hex()}{sw.to_bytes(2, byteorder='big').hex()}")
+
+
+@dataclass(frozen=True)
+class PartialSignature:
+    """Represents a partial signature returned by sign_psbt.
+
+    It always contains a pubkey and a signature.
+    The pubkey
+
+    The tapleaf_hash is also filled if signing a for a tapscript.
+    """
+    pubkey: bytes
+    signature: bytes
+    tapleaf_hash: Optional[bytes] = None
+
+
 class Client:
-    def __init__(self, transport_client: TransportClient, chain: Chain = Chain.MAIN) -> None:
+    def __init__(self, transport_client: TransportClient, chain: Chain = Chain.MAIN, debug: bool = False) -> None:
         self.transport_client = transport_client
         self.chain = chain
+        self.debug = debug
 
     def _apdu_exchange(self, apdu: dict) -> Tuple[int, bytes]:
         try:
-            return 0x9000, self.transport_client.apdu_exchange(**apdu)
+            if self.debug:
+                print_apdu(apdu)
+
+            response = self.transport_client.apdu_exchange(**apdu)
+            if self.debug:
+                print_response(0x9000, response)
+
+            return 0x9000, response
         except ApduException as e:
+            if self.debug:
+                print_response(e.sw, e.data)
+
             return e.sw, e.data
 
     def _make_request(self, apdu: dict) -> Tuple[int, bytes]:
@@ -93,20 +137,11 @@ class Client:
 
         format = r.read(1)
 
-        try:
-            app_name = deser_string(r)
-        except Exception as e:
-            app_name = b""
-        try:
-            app_version = deser_string(r)
-        except Exception as e:
-            app_version = b""
-        try:
-            app_flags = deser_string(r)
-        except Exception as e:
-            app_flags = b""
+        app_name = deser_string(r)
+        app_version = deser_string(r)
+        app_flags = deser_string(r)
 
-        if format != b'\1' or app_name == b'' or app_version == b'':
+        if format != b'\1' or app_name == b'' or app_version == b'' or app_flags == b'':
             raise DeviceException(error_code=sw, ins=DefaultInsType.GET_VERSION,
                                   message="Invalid format returned by GET_VERSION")
 
@@ -136,7 +171,7 @@ class Client:
         Parameters
         ----------
         wallet : WalletPolicy
-            The wallet policy to register on the device.
+            The Wallet policy to register on the device.
 
         Returns
         -------
@@ -183,18 +218,19 @@ class Client:
 
         raise NotImplementedError
 
-    def sign_psbt(self, psbt: PSBT, wallet: WalletPolicy, wallet_hmac: Optional[bytes]) -> List[Tuple[int, bytes, bytes]]:
+    def sign_psbt(self, psbt: Union[PSBT, bytes, str], wallet: WalletPolicy, wallet_hmac: Optional[bytes]) -> List[Tuple[int, PartialSignature]]:
         """Signs a PSBT using a registered wallet (or a standard wallet that does not need registration).
 
         Signature requires explicit approval from the user.
 
         Parameters
         ----------
-        psbt : PSBT
+        psbt : PSBT | bytes | str
             A PSBT of version 0 or 2, with all the necessary information to sign the inputs already filled in; what the
             required fields changes depending on the type of input.
             The non-witness UTXO must be present for both legacy and SegWit inputs, or the hardware wallet will reject
             signing (this will change for Taproot inputs).
+            The argument can be either a `PSBT` object, or `bytes`, or a base64-encoded `str`.
 
         wallet : WalletPolicy
             The registered wallet policy, or a standard wallet policy.
@@ -204,11 +240,10 @@ class Client:
 
         Returns
         -------
-        List[Tuple[int, bytes, bytes]]
+        List[Tuple[int, PartialSignature]]
             A list of tuples returned by the hardware wallets, where each element is a tuple of:
             - an integer, the index of the input being signed;
-            - a `bytes` array of length 33 (compressed ecdsa pubkey) or 32 (x-only BIP-0340 pubkey), the corresponding pubkey for this signature;
-            - a `bytes` array with the signature.
+            - an instance of `PartialSignature`.
         """
 
         raise NotImplementedError

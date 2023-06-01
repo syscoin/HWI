@@ -1,7 +1,8 @@
 from typing import List, Iterable, Mapping
 
 from ...common import sha256
-from ..._serialize import ser_compact_size as write_varint
+
+from ..._serialize import ser_compact_size
 
 NIL = bytes([0] * 32)
 
@@ -258,4 +259,4 @@ def get_merkleized_map_commitment(mapping: Mapping[bytes, bytes]) -> bytes:
     items_sorted = list(sorted(mapping.items()))
     keys_hashes = [element_hash(i[0]) for i in items_sorted]
     values_hashes = [element_hash(i[1]) for i in items_sorted]
-    return write_varint(len(mapping)) + MerkleTree(keys_hashes).root + MerkleTree(values_hashes).root
+    return ser_compact_size(len(mapping)) + MerkleTree(keys_hashes).root + MerkleTree(values_hashes).root

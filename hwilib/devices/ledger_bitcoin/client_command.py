@@ -2,41 +2,11 @@ from enum import IntEnum
 from typing import List, Mapping
 from collections import deque
 from hashlib import sha256
-from io import BytesIO
 
+from .common import ByteStreamParser
 from ...common import sha256
+from ..._serialize import ser_compact_size
 from .merkle import MerkleTree, element_hash
-from ..._serialize import ser_compact_size as write_varint
-
-
-class ByteStreamParser:
-    def __init__(self, input: bytes):
-        self.stream = BytesIO(input)
-
-    def assert_empty(self) -> bytes:
-        if self.stream.read(1) != b'':
-            raise ValueError("Byte stream was expected to be empty")
-
-    def read_bytes(self, n: int) -> bytes:
-        result = self.stream.read(n)
-        if len(result) < n:
-            raise ValueError("Byte stream exhausted")
-        return result
-
-    def read_uint(self, n: int, byteorder: str = "big") -> int:
-        return int.from_bytes(self.read_bytes(n), byteorder)
-
-    def read_varint(self) -> int:
-        prefix = self.read_uint(1)
-
-        if prefix == 253:
-            return self.read_uint(2, 'little')
-        elif prefix == 254:
-            return self.read_uint(4, 'little')
-        elif prefix == 255:
-            return self.read_uint(8, 'little')
-        else:
-            return prefix
 
 
 class ClientCommandCode(IntEnum):
@@ -90,7 +60,7 @@ class GetPreimageCommand(ClientCommand):
         if req_hash in self.known_preimages:
             known_preimage = self.known_preimages[req_hash]
 
-            preimage_len_out = write_varint(len(known_preimage))
+            preimage_len_out = ser_compact_size(len(known_preimage))
 
             # We can send at most 255 - len(preimage_len_out) - 1 bytes in a single message;
             # the rest will be stored for GET_MORE_ELEMENTS
@@ -193,7 +163,7 @@ class GetMerkleLeafIndexCommand(ClientCommand):
             leaf_index = 0
             found = 0
 
-        return found.to_bytes(1, byteorder="big") + write_varint(leaf_index)
+        return found.to_bytes(1, byteorder="big") + ser_compact_size(leaf_index)
 
 
 class GetMoreElementsCommand(ClientCommand):
@@ -278,8 +248,8 @@ class ClientCommandInterpreter:
         self.commands = {cmd.code: cmd for cmd in commands}
 
     def execute(self, hw_response: bytes) -> bytes:
-        """Interprets the client command requested by the hardware wallet, returning the appropriet
-        response and updating the client interpreter's internal state if appropriate.
+        """Interprets the client command requested by the hardware wallet, returning the appropriate
+        response and updating the client interpreter's internal state if needed.
 
         Parameters
         ----------

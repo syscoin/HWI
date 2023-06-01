@@ -6,12 +6,11 @@ from typing import List
 from hashlib import sha256
 
 from ...common import AddressType
+from ..._serialize import ser_compact_size
 from .merkle import MerkleTree, element_hash
-from ..._serialize import ser_compact_size as write_varint
-
 
 def serialize_str(value: str) -> bytes:
-    return len(value).to_bytes(1, byteorder="big") + value.encode("latin-1")
+    return len(value.encode()).to_bytes(1, byteorder="big") + value.encode()
 
 
 class WalletType(IntEnum):
@@ -70,9 +69,9 @@ class WalletPolicy(WalletPolicyBase):
 
         return b"".join([
             super().serialize(),
-            write_varint(len(self.descriptor_template.encode())),
+            ser_compact_size(len(self.descriptor_template.encode())),
             self.descriptor_template.encode() if self.version == WalletType.WALLET_POLICY_V1 else descriptor_template_sha256,
-            write_varint(len(self.keys_info)),
+            ser_compact_size(len(self.keys_info)),
             MerkleTree(keys_info_hashes).root
         ])
 
@@ -92,7 +91,6 @@ class WalletPolicy(WalletPolicyBase):
 
         return desc
 
-
 class MultisigWallet(WalletPolicy):
     def __init__(self, name: str, address_type: AddressType, threshold: int, keys_info: List[str], sorted: bool = True, version: WalletType = WalletType.WALLET_POLICY_V2) -> None:
         n_keys = len(keys_info)
@@ -104,13 +102,13 @@ class MultisigWallet(WalletPolicy):
 
         if (address_type == AddressType.LEGACY):
             policy_prefix = f"sh({multisig_op}("
-            policy_suffix = "))"
+            policy_suffix = f"))"
         elif address_type == AddressType.WIT:
             policy_prefix = f"wsh({multisig_op}("
-            policy_suffix = "))"
+            policy_suffix = f"))"
         elif address_type == AddressType.SH_WIT:
             policy_prefix = f"sh(wsh({multisig_op}("
-            policy_suffix = ")))"
+            policy_suffix = f")))"
         else:
             raise ValueError(f"Unexpected address type: {address_type}")
 
@@ -119,7 +117,7 @@ class MultisigWallet(WalletPolicy):
         descriptor_template = "".join([
             policy_prefix,
             str(threshold) + ",",
-            ",".join("@" + str(k) + key_placeholder_suffix for k in range(n_keys)),
+            ",".join("@" + str(l) + key_placeholder_suffix for l in range(n_keys)),
             policy_suffix
         ])
 

@@ -1,12 +1,9 @@
 import enum
 from typing import List, Tuple, Mapping, Union, Iterator, Optional
 
-from ..._serialize import ser_compact_size as write_varint
 from .merkle import get_merkleized_map_commitment, MerkleTree, element_hash
 from .wallet import WalletPolicy
-
-# p2 encodes the protocol version implemented
-CURRENT_PROTOCOL_VERSION = 1
+from ..._serialize import ser_compact_size
 
 def bip32_path_from_string(path: str) -> List[bytes]:
     splitted_path: List[str] = path.split("/")
@@ -21,6 +18,8 @@ def bip32_path_from_string(path: str) -> List[bytes]:
             else (0x80000000 | int(p[:-1])).to_bytes(4, byteorder="big")
             for p in splitted_path]
 
+# p2 encodes the protocol version implemented
+CURRENT_PROTOCOL_VERSION = 1
 
 def chunkify(data: bytes, chunk_len: int) -> Iterator[Tuple[bool, bytes]]:
     size: int = len(data)
@@ -46,7 +45,6 @@ class DefaultInsType(enum.IntEnum):
 
 class BitcoinInsType(enum.IntEnum):
     GET_EXTENDED_PUBKEY = 0x00
-    GET_ADDRESS = 0x01
     REGISTER_WALLET = 0x02
     GET_WALLET_ADDRESS = 0x03
     SIGN_PSBT = 0x04
@@ -96,13 +94,13 @@ class BitcoinCommandBuilder:
 
         return {"cla": cla, "ins": ins, "p1": p1, "p2": p2, "data": cdata}
 
-    def get_extended_pubkey(self, bip32_path: List[int], display: bool = False):
-        bip32_paths: List[bytes] = bip32_path_from_string(bip32_path)
+    def get_extended_pubkey(self, bip32_path: str, display: bool = False):
+        bip32_path: List[bytes] = bip32_path_from_string(bip32_path)
 
         cdata: bytes = b"".join([
             b'\1' if display else b'\0',
-            len(bip32_paths).to_bytes(1, byteorder="big"),
-            *bip32_paths
+            len(bip32_path).to_bytes(1, byteorder="big"),
+            *bip32_path
         ])
 
         return self.serialize(
@@ -117,7 +115,7 @@ class BitcoinCommandBuilder:
         return self.serialize(
             cla=self.CLA_BITCOIN,
             ins=BitcoinInsType.REGISTER_WALLET,
-            cdata=write_varint(len(wallet_bytes)) + wallet_bytes,
+            cdata=ser_compact_size(len(wallet_bytes)) + wallet_bytes,
         )
 
     def get_wallet_address(
@@ -156,7 +154,7 @@ class BitcoinCommandBuilder:
         cdata = bytearray()
         cdata += get_merkleized_map_commitment(global_mapping)
 
-        cdata += write_varint(len(input_mappings))
+        cdata += ser_compact_size(len(input_mappings))
         cdata += MerkleTree(
             [
                 element_hash(get_merkleized_map_commitment(m_in))
@@ -164,7 +162,7 @@ class BitcoinCommandBuilder:
             ]
         ).root
 
-        cdata += write_varint(len(output_mappings))
+        cdata += ser_compact_size(len(output_mappings))
         cdata += MerkleTree(
             [
                 element_hash(get_merkleized_map_commitment(m_out))
@@ -197,7 +195,7 @@ class BitcoinCommandBuilder:
         cdata += len(bip32_path).to_bytes(1, byteorder="big")
         cdata += b''.join(bip32_path)
 
-        cdata += write_varint(len(message))
+        cdata += ser_compact_size(len(message))
 
         cdata += MerkleTree(element_hash(c) for c in chunks).root
 

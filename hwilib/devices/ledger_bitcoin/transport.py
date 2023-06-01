@@ -1,13 +1,13 @@
-"""ledgercomm.transport module."""
+# extracted from ledgercomm in order to add the `path` parameter to the constructor.
 
 import enum
 import logging
 import struct
-from typing import Union, Tuple, Optional, cast
+from typing import Union, Tuple, Optional, Literal, cast
 
-from .interfaces.tcp_client import TCPClient
-from .interfaces.hid_device import HID
-from .log import LOG
+from ledgercomm.interfaces.tcp_client import TCPClient
+from ledgercomm.interfaces.hid_device import HID
+from ledgercomm.log import LOG
 
 
 class TransportType(enum.Enum):
@@ -28,9 +28,14 @@ class Transport:
     interface : str
         Either "hid" or "tcp" for the underlying communication interface.
     server : str
-        IP adress of the TCP server if interface is "tcp".
+        IP address of the TCP server if interface is "tcp".
     port : int
         Port of the TCP server if interface is "tcp".
+    path : Optional[str]
+        The path to use with HID if interface is "hid"; defaults to `None`.
+    hid : Optional[HID]
+        The HID instance to use if interface is "hid"; defaults to `None`.
+        If not None, the instance is already presumed open.
     debug : bool
         Whether you want debug logs or not.
 
@@ -44,27 +49,35 @@ class Transport:
     """
 
     def __init__(self,
-                 interface: str = "tcp", # Literal["hid", "tcp"]
+                 interface: Literal["hid", "tcp"] = "tcp",
                  server: str = "127.0.0.1",
                  port: int = 9999,
-                 hid_path: Optional[bytes] = None,
+                 path: Optional[str] = None,
+                 hid: Optional[HID] = None,
                  debug: bool = False) -> None:
         """Init constructor of Transport."""
         if debug:
             LOG.setLevel(logging.DEBUG)
 
-        self.interface: TransportType
+        self.inferface: TransportType
 
         try:
             self.interface = TransportType[interface.upper()]
         except KeyError as exc:
             raise Exception(f"Unknown interface '{interface}'!") from exc
 
-        self.com: Union[TCPClient, HID] = (TCPClient(server=server, port=port)
-                                           if self.interface == TransportType.TCP
-                                           else HID(hid_path=hid_path))
-
-        self.com.open()
+        if self.interface == TransportType.TCP:
+            self.com = TCPClient(
+                server=server, port=port)
+            self.com.open()
+        else:
+            if hid is not None:
+                self.com = hid
+                # we assume the instance is already open, when the `hid` parameter is given
+            else:
+                self.com = HID()
+                self.com.path = path
+                self.com.open()
 
     @staticmethod
     def apdu_header(cla: int,
@@ -96,7 +109,8 @@ class Transport:
             APDU header packed with parameters.
 
         """
-        ins = cast(int, ins.value) if isinstance(ins, enum.IntEnum) else cast(int, ins)
+        ins = cast(int, ins.value) if isinstance(
+            ins, enum.IntEnum) else cast(int, ins)
 
         if opt:
             return struct.pack("BBBBBB",
@@ -144,7 +158,8 @@ class Transport:
             Total lenght of the APDU sent.
 
         """
-        header: bytes = Transport.apdu_header(cla, ins, p1, p2, option, len(cdata))
+        header: bytes = Transport.apdu_header(
+            cla, ins, p1, p2, option, len(cdata))
 
         return self.com.send(header + cdata)
 
@@ -212,7 +227,8 @@ class Transport:
             as int) and the reponse data (bytes of variable lenght).
 
         """
-        header: bytes = Transport.apdu_header(cla, ins, p1, p2, option, len(cdata))
+        header: bytes = Transport.apdu_header(
+            cla, ins, p1, p2, option, len(cdata))
 
         return self.com.exchange(header + cdata)
 
