@@ -277,9 +277,9 @@ Derivation Path BIP Compliance
 ==============================
 
 The instructions above use BIP 84 to derive keys used for P2WPKH addresses (bech32 addresses).
-HWI follows BIPs 44, 84, and 49. By default, descriptors will be for P2WPKH addresses with keys derived at ``m/84h/0h/0h/0`` for normal receiving keys and ``m/84h/0h/0h/1`` for change keys.
-Using the ``--addr-type legacy`` option will result in P2PKH addresses with keys derived at ``m/44h/0h/0h/0`` for normal receiving keys and ``m/44h/0h/0h/1`` for change keys.
-Using the ``--addr-type sh_wit`` option will result in P2SH nested P2WPKH addresses with keys derived at ``m/49h/0h/0h/0`` for normal receiving keys and ``m/49h/0h/0h/1`` for change keys.
+HWI follows BIPs 44, 84, and 49. By default, descriptors will be for P2WPKH addresses with keys derived at ``m/84h/57h/0h/0`` for normal receiving keys and ``m/84h/57h/0h/1`` for change keys.
+Using the ``--addr-type legacy`` option will result in P2PKH addresses with keys derived at ``m/44h/57h/0h/0`` for normal receiving keys and ``m/44h/57h/0h/1`` for change keys.
+Using the ``--addr-type sh_wit`` option will result in P2SH nested P2WPKH addresses with keys derived at ``m/49h/57h/0h/0`` for normal receiving keys and ``m/49h/57h/0h/1`` for change keys.
 
 To actually get the correct address type when using ``getnewaddress`` from Syscoin Core, you will need to additionally set ``-addresstype=p2sh-segwit`` and ``-changetype=p2sh-segwit``.
 This can be set in the command line (as shown in the example) or in your syscoin.conf file.
