@@ -142,23 +142,23 @@ Sending
 To send Syscoin, we will use ``walletcreatefundedpsbt``. This will create a Partially Signed Syscoin Transaction which is funded by inputs from the wallets (i.e. your watching only inputs selected with Syscoin Core's coin selection algorithm).
 This PSBT can be used with HWI to produce a signed PSBT which can then be finalized and broadcast.
 
-For example, suppose I am sending to 1 BTC to bc1q257z5t76hedc36wmmzva05890ny3kxd7xfwrgy. First I create a funded psbt with BIP 32 derivation paths to be included::
+For example, suppose I am sending to 0.01 SYS to sys1qwz7u96hxs768mp7dwqv7947lqyv74a37568urm. First I create a funded psbt with BIP 32 derivation paths to be included::
 
-    $ src/syscoin-cli -rpcwallet=ledger walletcreatefundedpsbt '[]' '[{"sys1qwz7u96hxs768mp7dwqv7947lqyv74a37568urm":1}]' 0 '{"includeWatching":true}' true
+    $ src/syscoin-cli -rpcwallet=ledger walletcreatefundedpsbt '[]' '[{"sys1qwz7u96hxs768mp7dwqv7947lqyv74a37568urm": 0.01}]' 0 '{"includeWatching":true}' true
     {
-      "psbt": "cHNidP8BAHECAAAAAU8KWkCU7H4MYBiZHmLey6FavV3L3xLfy4tVEZoubx+2AAAAAAD+////AgDh9QUAAAAAFgAUVTwqL9q+W4jp29iZ19DlfMkbGb78eNcXAAAAABYAFLHuX3WRuPs3ypeQOziNw5qFlBH8AAAAAAABAR8AZc0dAAAAABYAFOHBlVRAplXb3rO39IoSBvhnGZEvIgYCIyDxz3Lnuizva+MtdJPOO9TGoldf5RziYDd63BZWA9QYgDjs2VQAAIABAACAAAAAgAAAAAAAAAAAAAAiAgP0HMQ2K693zCXTCudBUzemDhxLmFGETOnAV7vgDz2r9RiAOOzZVAAAgAEAAIAAAACAAQAAAAAAAAAA",
-      "fee": 0.00002820,
-      "changepos": 1
+      "psbt": "cHNidP8BAHECAAAAASCTHvv5pfzAy/U1E0GAxm1girdVOuKC+P9ZM0X2WPj2AAAAAAD9////AkuahwAAAAAAFgAU0E3TVKQZwup+LviIL/+9cPckEyxAQg8AAAAAABYAFHC9wurmh7R9h81wGeLX3wEZ6vY+AAAAAAABAFICAAAAAbLHoztGRND+QNRLdna/d/KF8uQSHMd9JuAIGHgqFDcEAAAAAAD9////ARjdlgAAAAAAFgAUZubTmVihRJ3bsF1ojHrRprbd6kMAAAAAAQEfGN2WAAAAAAAWABRm5tOZWKFEnduwXWiMetGmtt3qQyIGAggV9Xnq2EooibEYEnDmDYrqhu0z8JEEZce3u035RoZgGMBFhPhUAACAOQAAgAAAAIAAAAAAAAAAAAAiAgLlwYRz+zQdf4MnKBE+vZ9148G0zecYIm75HeqQqn/6gxjARYT4VAAAgDkAAIAAAACAAQAAAAEAAAAAAA==",
+      "fee": 0.00000141,
+      "changepos": 0
     }
 
 
 Now I take the updated psbt and inspect it with ``decodepsbt``::
 
-    $ src/syscoin-cli decodepsbt cHNidP8BAHECAAAAAU8KWkCU7H4MYBiZHmLey6FavV3L3xLfy4tVEZoubx+2AAAAAAD+////AgDh9QUAAAAAFgAUVTwqL9q+W4jp29iZ19DlfMkbGb78eNcXAAAAABYAFLHuX3WRuPs3ypeQOziNw5qFlBH8AAAAAAABAR8AZc0dAAAAABYAFOHBlVRAplXb3rO39IoSBvhnGZEvIgYCIyDxz3Lnuizva+MtdJPOO9TGoldf5RziYDd63BZWA9QYgDjs2VQAAIABAACAAAAAgAAAAAAAAAAAAAAiAgP0HMQ2K693zCXTCudBUzemDhxLmFGETOnAV7vgDz2r9RiAOOzZVAAAgAEAAIAAAACAAQAAAAAAAAAA
+    $ src/syscoin-cli decodepsbt "cHNidP8BAHECAAAAASCTHvv5pfzAy/U1E0GAxm1girdVOuKC+P9ZM0X2WPj2AAAAAAD9////AkuahwAAAAAAFgAU0E3TVKQZwup+LviIL/+9cPckEyxAQg8AAAAAABYAFHC9wurmh7R9h81wGeLX3wEZ6vY+AAAAAAABAFICAAAAAbLHoztGRND+QNRLdna/d/KF8uQSHMd9JuAIGHgqFDcEAAAAAAD9////ARjdlgAAAAAAFgAUZubTmVihRJ3bsF1ojHrRprbd6kMAAAAAAQEfGN2WAAAAAAAWABRm5tOZWKFEnduwXWiMetGmtt3qQyIGAggV9Xnq2EooibEYEnDmDYrqhu0z8JEEZce3u035RoZgGMBFhPhUAACAOQAAgAAAAIAAAAAAAAAAAAAiAgLlwYRz+zQdf4MnKBE+vZ9148G0zecYIm75HeqQqn/6gxjARYT4VAAAgDkAAIAAAACAAQAAAAEAAAAAAA=="
     {
       "tx": {
-        "txid": "e51392c82e13bbfe714c73361aff14ac1a1637abf37587a562844ae5a4265adf",
-        "hash": "e51392c82e13bbfe714c73361aff14ac1a1637abf37587a562844ae5a4265adf",
+        "txid": "cb8083a9830938ca426f8e2963a8ba4ff65176fbf7afc241e79839866f720add",
+        "hash": "cb8083a9830938ca426f8e2963a8ba4ff65176fbf7afc241e79839866f720add",
         "version": 2,
         "size": 113,
         "vsize": 113,
@@ -166,80 +166,115 @@ Now I take the updated psbt and inspect it with ``decodepsbt``::
         "locktime": 0,
         "vin": [
           {
-            "txid": "b61f6f2e9a11558bcbdf12dfcb5dbd5aa1cbde621e9918600c7eec94405a0a4f",
+            "txid": "f6f858f6453359fff882e23a55b78a606dc680411335f5cbc0fca5f9fb1e9320",
             "vout": 0,
             "scriptSig": {
               "asm": "",
               "hex": ""
             },
-            "sequence": 4294967294
+            "sequence": 4294967293
           }
         ],
         "vout": [
           {
-            "value": 1.00000000,
+            "value": 0.08886859,
             "n": 0,
             "scriptPubKey": {
-              "asm": "0 553c2a2fdabe5b88e9dbd899d7d0e57cc91b19be",
-              "hex": "0014553c2a2fdabe5b88e9dbd899d7d0e57cc91b19be",
-              "reqSigs": 1,
-              "type": "witness_v0_keyhash",
-              "addresses": [
-                "bc1q257z5t76hedc36wmmzva05890ny3kxd7xfwrgy"
-              ]
+              "asm": "0 d04dd354a419c2ea7e2ef8882fffbd70f724132c",
+              "desc": "addr(sys1q6pxax49yr8pw5l3wlzyzllaawrmjgyev2aeqqc)#6vvmfj6x",
+              "hex": "0014d04dd354a419c2ea7e2ef8882fffbd70f724132c",
+              "address": "sys1q6pxax49yr8pw5l3wlzyzllaawrmjgyev2aeqqc",
+              "type": "witness_v0_keyhash"
             }
           },
           {
-            "value": 3.99997180,
+            "value": 0.01000000,
             "n": 1,
             "scriptPubKey": {
-              "asm": "0 b1ee5f7591b8fb37ca97903b388dc39a859411fc",
-              "hex": "0014b1ee5f7591b8fb37ca97903b388dc39a859411fc",
-              "reqSigs": 1,
-              "type": "witness_v0_keyhash",
-              "addresses": [
-                "bc1qk8h97av3hran0j5hjqan3rwrn2zegy0unusy49"
-              ]
+              "asm": "0 70bdc2eae687b47d87cd7019e2d7df0119eaf63e",
+              "desc": "addr(sys1qwz7u96hxs768mp7dwqv7947lqyv74a37568urm)#jhr3jcrd",
+              "hex": "001470bdc2eae687b47d87cd7019e2d7df0119eaf63e",
+              "address": "sys1qwz7u96hxs768mp7dwqv7947lqyv74a37568urm",
+              "type": "witness_v0_keyhash"
             }
           }
         ]
       },
+      "global_xpubs": [
+      ],
+      "psbt_version": 0,
+      "proprietary": [
+      ],
       "unknown": {
       },
       "inputs": [
         {
           "witness_utxo": {
-            "amount": 5.00000000,
+            "amount": 0.09887000,
             "scriptPubKey": {
-              "asm": "0 e1c1955440a655dbdeb3b7f48a1206f86719912f",
-              "hex": "0014e1c1955440a655dbdeb3b7f48a1206f86719912f",
-              "type": "witness_v0_keyhash",
-              "address": "bc1qu8qe24zq5e2ahh4nkl6g5ysxlpn3nyf0wyd5k2"
+              "asm": "0 66e6d39958a1449ddbb05d688c7ad1a6b6ddea43",
+              "desc": "addr(sys1qvmnd8x2c59zfmkast45gc7k356mdm6jr20mgzh)#tstr6vhd",
+              "hex": "001466e6d39958a1449ddbb05d688c7ad1a6b6ddea43",
+              "address": "sys1qvmnd8x2c59zfmkast45gc7k356mdm6jr20mgzh",
+              "type": "witness_v0_keyhash"
             }
+          },
+          "non_witness_utxo": {
+            "txid": "f6f858f6453359fff882e23a55b78a606dc680411335f5cbc0fca5f9fb1e9320",
+            "hash": "f6f858f6453359fff882e23a55b78a606dc680411335f5cbc0fca5f9fb1e9320",
+            "version": 2,
+            "size": 82,
+            "vsize": 82,
+            "weight": 328,
+            "locktime": 0,
+            "vin": [
+              {
+                "txid": "0437142a781808e0267dc71c12e4f285f277bf76764bd440fed044463ba3c7b2",
+                "vout": 0,
+                "scriptSig": {
+                  "asm": "",
+                  "hex": ""
+                },
+                "sequence": 4294967293
+              }
+            ],
+            "vout": [
+              {
+                "value": 0.09887000,
+                "n": 0,
+                "scriptPubKey": {
+                  "asm": "0 66e6d39958a1449ddbb05d688c7ad1a6b6ddea43",
+                  "desc": "addr(sys1qvmnd8x2c59zfmkast45gc7k356mdm6jr20mgzh)#tstr6vhd",
+                  "hex": "001466e6d39958a1449ddbb05d688c7ad1a6b6ddea43",
+                  "address": "sys1qvmnd8x2c59zfmkast45gc7k356mdm6jr20mgzh",
+                  "type": "witness_v0_keyhash"
+                }
+              }
+            ]
           },
           "bip32_derivs": [
             {
-              "pubkey": "022320f1cf72e7ba2cef6be32d7493ce3bd4c6a2575fe51ce260377adc165603d4",
-              "master_fingerprint": "8038ecd9",
-              "path": "m/84'/1'/0'/0/0"
+              "pubkey": "020815f579ead84a2889b1181270e60d8aea86ed33f0910465c7b7bb4df9468660",
+              "master_fingerprint": "c04584f8",
+              "path": "m/84'/57'/0'/0/0"
             }
           ]
         }
       ],
       "outputs": [
         {
-        },
-        {
           "bip32_derivs": [
             {
-              "pubkey": "03f41cc4362baf77cc25d30ae7415337a60e1c4b9851844ce9c057bbe00f3dabf5",
-              "master_fingerprint": "8038ecd9",
-              "path": "m/84'/1'/0'/1/0"
+              "pubkey": "02e5c18473fb341d7f832728113ebd9f75e3c1b4cde718226ef91dea90aa7ffa83",
+              "master_fingerprint": "c04584f8",
+              "path": "m/84'/57'/0'/1/1"
             }
           ]
+        },
+        {
         }
       ],
-      "fee": 0.00002820
+      "fee": 0.00000141
     }
 
 Once the transaction has been inspected and everything looks good, the transaction can now be signed using HWI.
@@ -247,11 +282,11 @@ Once the transaction has been inspected and everything looks good, the transacti
 ::
 
     $ cd ../HWI
-    $ ./hwi.py -f c04584f8 --testnet signtx cHNidP8BAHECAAAAAU8KWkCU7H4MYBiZHmLey6FavV3L3xLfy4tVEZoubx+2AAAAAAD+////AgDh9QUAAAAAFgAUVTwqL9q+W4jp29iZ19DlfMkbGb78eNcXAAAAABYAFLHuX3WRuPs3ypeQOziNw5qFlBH8AAAAAAABAR8AZc0dAAAAABYAFOHBlVRAplXb3rO39IoSBvhnGZEvIgYCIyDxz3Lnuizva+MtdJPOO9TGoldf5RziYDd63BZWA9QYgDjs2VQAAIABAACAAAAAgAAAAAAAAAAAAAAiAgP0HMQ2K693zCXTCudBUzemDhxLmFGETOnAV7vgDz2r9RiAOOzZVAAAgAEAAIAAAACAAQAAAAAAAAAA
+    $ ./hwi.py -f c04584f8 signtx "cHNidP8BAHECAAAAASCTHvv5pfzAy/U1E0GAxm1girdVOuKC+P9ZM0X2WPj2AAAAAAD9////AkuahwAAAAAAFgAU0E3TVKQZwup+LviIL/+9cPckEyxAQg8AAAAAABYAFHC9wurmh7R9h81wGeLX3wEZ6vY+AAAAAAABAFICAAAAAbLHoztGRND+QNRLdna/d/KF8uQSHMd9JuAIGHgqFDcEAAAAAAD9////ARjdlgAAAAAAFgAUZubTmVihRJ3bsF1ojHrRprbd6kMAAAAAAQEfGN2WAAAAAAAWABRm5tOZWKFEnduwXWiMetGmtt3qQyIGAggV9Xnq2EooibEYEnDmDYrqhu0z8JEEZce3u035RoZgGMBFhPhUAACAOQAAgAAAAIAAAAAAAAAAAAAiAgLlwYRz+zQdf4MnKBE+vZ9148G0zecYIm75HeqQqn/6gxjARYT4VAAAgDkAAIAAAACAAQAAAAEAAAAAAA=="
 
 Follow the onscreen instructions, check everything, and approve the transaction. The result will look like::
 
-    {"psbt": "cHNidP8BAHECAAAAAU8KWkCU7H4MYBiZHmLey6FavV3L3xLfy4tVEZoubx+2AAAAAAD+////AgDh9QUAAAAAFgAUVTwqL9q+W4jp29iZ19DlfMkbGb78eNcXAAAAABYAFLHuX3WRuPs3ypeQOziNw5qFlBH8AAAAAAABAR8AZc0dAAAAABYAFOHBlVRAplXb3rO39IoSBvhnGZEvIgICIyDxz3Lnuizva+MtdJPOO9TGoldf5RziYDd63BZWA9RIMEUCIQDMECVXsrFK5XbMQn5yVCvm3zWF1kdCgepf3RSqFDDmAAIgQtty07rN4zBWMjd1qVOtkgOHBAlGaO2Se3LkiNsABYcBAQMEAQAAACIGAiMg8c9y57os72vjLXSTzjvUxqJXX+Uc4mA3etwWVgPUGIA47NlUAACAAQAAgAAAAIAAAAAAAAAAAAAAIgID9BzENiuvd8wl0wrnQVM3pg4cS5hRhEzpwFe74A89q/UYgDjs2VQAAIABAACAAAAAgAEAAAAAAAAAAA=="}
+    {"psbt": "cHNidP8BAHECAAAAASCTHvv5pfzAy/U1E0GAxm1girdVOuKC+P9ZM0X2WPj2AAAAAAD9////AkuahwAAAAAAFgAU0E3TVKQZwup+LviIL/+9cPckEyxAQg8AAAAAABYAFHC9wurmh7R9h81wGeLX3wEZ6vY+AAAAAAABAFICAAAAAbLHoztGRND+QNRLdna/d/KF8uQSHMd9JuAIGHgqFDcEAAAAAAD9////ARjdlgAAAAAAFgAUZubTmVihRJ3bsF1ojHrRprbd6kMAAAAAAQEfGN2WAAAAAAAWABRm5tOZWKFEnduwXWiMetGmtt3qQyICAggV9Xnq2EooibEYEnDmDYrqhu0z8JEEZce3u035RoZgRzBEAiB8BdTSbZpe2+tNY06QYz1KoKhCftM4Q0Ab4PzdCeQIqAIgNCx/p0JinTATQE9fPC6UilftEPKNhkDDSRM1317u2MYBIgYCCBX1eerYSiiJsRgScOYNiuqG7TPwkQRlx7e7TflGhmAYwEWE+FQAAIA5AACAAAAAgAAAAAAAAAAAACICAuXBhHP7NB1/gycoET69n3XjwbTN5xgibvkd6pCqf/qDGMBFhPhUAACAOQAAgAAAAIABAAAAAQAAAAAA", "signed": true}
 
 We can now take the PSBT, finalize it, and broadcast it with Syscoin Core
 
@@ -259,13 +294,13 @@ We can now take the PSBT, finalize it, and broadcast it with Syscoin Core
 ::
 
     $ cd ../syscoin
-    $ src/syscoin-cli finalizepsbt cHNidP8BAHECAAAAAU8KWkCU7H4MYBiZHmLey6FavV3L3xLfy4tVEZoubx+2AAAAAAD+////AgDh9QUAAAAAFgAUVTwqL9q+W4jp29iZ19DlfMkbGb78eNcXAAAAABYAFLHuX3WRuPs3ypeQOziNw5qFlBH8AAAAAAABAR8AZc0dAAAAABYAFOHBlVRAplXb3rO39IoSBvhnGZEvIgICIyDxz3Lnuizva+MtdJPOO9TGoldf5RziYDd63BZWA9RIMEUCIQDMECVXsrFK5XbMQn5yVCvm3zWF1kdCgepf3RSqFDDmAAIgQtty07rN4zBWMjd1qVOtkgOHBAlGaO2Se3LkiNsABYcBAQMEAQAAACIGAiMg8c9y57os72vjLXSTzjvUxqJXX+Uc4mA3etwWVgPUGIA47NlUAACAAQAAgAAAAIAAAAAAAAAAAAAAIgID9BzENiuvd8wl0wrnQVM3pg4cS5hRhEzpwFe74A89q/UYgDjs2VQAAIABAACAAAAAgAEAAAAAAAAAAA==
+    $ src/syscoin-cli finalizepsbt cHNidP8BAHECAAAAASCTHvv5pfzAy/U1E0GAxm1girdVOuKC+P9ZM0X2WPj2AAAAAAD9////AkuahwAAAAAAFgAU0E3TVKQZwup+LviIL/+9cPckEyxAQg8AAAAAABYAFHC9wurmh7R9h81wGeLX3wEZ6vY+AAAAAAABAFICAAAAAbLHoztGRND+QNRLdna/d/KF8uQSHMd9JuAIGHgqFDcEAAAAAAD9////ARjdlgAAAAAAFgAUZubTmVihRJ3bsF1ojHrRprbd6kMAAAAAAQEfGN2WAAAAAAAWABRm5tOZWKFEnduwXWiMetGmtt3qQyICAggV9Xnq2EooibEYEnDmDYrqhu0z8JEEZce3u035RoZgRzBEAiB8BdTSbZpe2+tNY06QYz1KoKhCftM4Q0Ab4PzdCeQIqAIgNCx/p0JinTATQE9fPC6UilftEPKNhkDDSRM1317u2MYBIgYCCBX1eerYSiiJsRgScOYNiuqG7TPwkQRlx7e7TflGhmAYwEWE+FQAAIA5AACAAAAAgAAAAAAAAAAAACICAuXBhHP7NB1/gycoET69n3XjwbTN5xgibvkd6pCqf/qDGMBFhPhUAACAOQAAgAAAAIABAAAAAQAAAAAA
     {
-      "hex": "020000000001014f0a5a4094ec7e0c6018991e62decba15abd5dcbdf12dfcb8b55119a2e6f1fb60000000000feffffff0200e1f50500000000160014553c2a2fdabe5b88e9dbd899d7d0e57cc91b19befc78d71700000000160014b1ee5f7591b8fb37ca97903b388dc39a859411fc02483045022100cc102557b2b14ae576cc427e72542be6df3585d6474281ea5fdd14aa1430e600022042db72d3bacde33056323775a953ad92038704094668ed927b72e488db0005870121022320f1cf72e7ba2cef6be32d7493ce3bd4c6a2575fe51ce260377adc165603d400000000",
+      "hex": "0200000000010120931efbf9a5fcc0cbf535134180c66d608ab7553ae282f8ff593345f658f8f60000000000fdffffff024b9a870000000000160014d04dd354a419c2ea7e2ef8882fffbd70f724132c40420f000000000016001470bdc2eae687b47d87cd7019e2d7df0119eaf63e0247304402207c05d4d26d9a5edbeb4d634e90633d4aa0a8427ed33843401be0fcdd09e408a80220342c7fa742629d3013404f5f3c2e948a57ed10f28d8640c3491335df5eeed8c60121020815f579ead84a2889b1181270e60d8aea86ed33f0910465c7b7bb4df946866000000000",
       "complete": true
     }
-    $ src/syscoin-cli sendrawtransaction 020000000001014f0a5a4094ec7e0c6018991e62decba15abd5dcbdf12dfcb8b55119a2e6f1fb60000000000feffffff0200e1f50500000000160014553c2a2fdabe5b88e9dbd899d7d0e57cc91b19befc78d71700000000160014b1ee5f7591b8fb37ca97903b388dc39a859411fc02483045022100cc102557b2b14ae576cc427e72542be6df3585d6474281ea5fdd14aa1430e600022042db72d3bacde33056323775a953ad92038704094668ed927b72e488db0005870121022320f1cf72e7ba2cef6be32d7493ce3bd4c6a2575fe51ce260377adc165603d400000000
-    e51392c82e13bbfe714c73361aff14ac1a1637abf37587a562844ae5a4265adf
+    $ src/syscoin-cli sendrawtransaction 0200000000010120931efbf9a5fcc0cbf535134180c66d608ab7553ae282f8ff593345f658f8f60000000000fdffffff024b9a870000000000160014d04dd354a419c2ea7e2ef8882fffbd70f724132c40420f000000000016001470bdc2eae687b47d87cd7019e2d7df0119eaf63e0247304402207c05d4d26d9a5edbeb4d634e90633d4aa0a8427ed33843401be0fcdd09e408a80220342c7fa742629d3013404f5f3c2e948a57ed10f28d8640c3491335df5eeed8c60121020815f579ead84a2889b1181270e60d8aea86ed33f0910465c7b7bb4df946866000000000
+    cb8083a9830938ca426f8e2963a8ba4ff65176fbf7afc241e79839866f720add
 
 Refilling the keypools
 ----------------------

@@ -191,7 +191,7 @@ class LedgerClient(HardwareWalletClient):
         - Only keys derived with standard BIP 44, 49, 84, and 86 derivation paths are supported for single signature addresses.
         """
         master_fp = self.get_master_fingerprint()
-
+        
         def legacy_sign_tx() -> PSBT:
             client = self.client
             if not isinstance(client, LegacyClient):
@@ -338,8 +338,9 @@ class LedgerClient(HardwareWalletClient):
                         psbt_in.witness_utxo = None
 
             input_sigs = self.client.sign_psbt(psbt2, wallet, wallet_hmac)
-
-            for idx, pubkey, sig in input_sigs:
+            for idx, partial_sig in input_sigs:
+                pubkey = partial_sig.pubkey
+                sig = partial_sig.signature
                 psbt_in = psbt2.inputs[idx]
 
                 utxo = None
